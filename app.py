@@ -20,5 +20,7 @@ def process_email():
     else:
         return jsonify({"error": "Unknown newsletter source"}), 400
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+# Remove the if __name__ == '__main__' block
+
+# Add this line at the end of the file
+application = app

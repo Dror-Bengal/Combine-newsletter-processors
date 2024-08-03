@@ -1,11 +1,9 @@
 services:
   - type: web
-    name: combined-newsletter-processor
+    name: newsletter-processor
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:application
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
-      - key: PORT
-        value: 10000
