@@ -34,22 +34,23 @@ def extract_content_blocks(soup):
     content_blocks = []
     score = 1
 
-    # Find all content blocks (assuming they're in a table with id="rssColumn")
+    # Find the table with id="rssColumn"
     rss_column = soup.find('table', id='rssColumn')
     if rss_column:
+        # Find all content blocks within the rssColumn
         for block in rss_column.find_all('div', style=lambda value: value and 'padding-bottom: 10px;' in value):
             content = {}
 
             # Extract image
             img_tag = block.find('img', class_='mc-rss-item-img')
             if img_tag:
-                content['image'] = img_tag['src']
+                content['image'] = img_tag.get('src', '')
 
             # Extract headline and link
             headline_tag = block.find('a', style=lambda value: value and 'font-family: \'Oswald\'' in value)
             if headline_tag:
                 content['text'] = headline_tag.text.strip()
-                content['link'] = headline_tag['href']
+                content['link'] = headline_tag.get('href', '')
 
             # Extract description
             description_tag = block.find('div', id='rssContent')
@@ -66,6 +67,7 @@ def extract_content_blocks(soup):
                 content_blocks.append(content)
                 score += 1
 
+    logging.debug(f"Extracted {len(content_blocks)} content blocks")
     return content_blocks
 
 def determine_sub_category(text):
