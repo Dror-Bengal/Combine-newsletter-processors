@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from processor_v1 import process_email as process_creativity_daily
 from processor_v2 import process_email as process_aotw
 from processor_creative_bloq import process_email as process_creative_bloq
+from processor_campaign_brief import process_email as process_campaign_brief
 import logging
 import json
 
@@ -44,6 +45,9 @@ def process_email():
     elif "creativebloq@smartbrief.com" in sender:
         logging.debug("Processing as Creative Bloq")
         return process_creative_bloq(data)
+    elif "no-reply@campaignbrief.com" in sender or "no-reply@campaignbrief.co.nz" in sender:
+        logging.debug("Processing as Campaign Brief")
+        return process_campaign_brief(data)
     else:
         logging.error(f"Unknown newsletter source: {sender}")
         return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
