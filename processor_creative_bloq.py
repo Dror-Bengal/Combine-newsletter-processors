@@ -65,6 +65,11 @@ def extract_stories(content):
             if headline:
                 story_data['text'] = headline.text.strip()
             
+            # Extract additional text
+            additional_text = story.find('div', class_='name-100')
+            if additional_text:
+                story_data['description'] = additional_text.text.strip()
+            
             # Extract link
             link = story.find('a', attrs={'data-testid': 'cta_link'})
             if link:
