@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
 import logging
 import re
@@ -6,6 +6,9 @@ import urllib.parse
 
 logging.basicConfig(level=logging.DEBUG)
 
+app = Flask(__name__)
+
+@app.route('/process_newsletter', methods=['POST'])
 def process_newsletter():
     try:
         data = request.get_json()
@@ -98,9 +101,38 @@ def process_newsletter():
         logging.error(f"Error processing request: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-from flask import Flask
+@app.route('/process_email', methods=['POST'])
+def process_email():
+    logging.debug(f"Received request data: {request.data}")
+    try:
+        data = request.json
+        logging.debug(f"Parsed JSON data: {data}")
 
-app = Flask(__name__)
+        if 'metadata' not in data or 'content' not in data['metadata']:
+            raise KeyError("Missing 'content' key in the 'metadata' section of the JSON payload")
+
+        content = data['metadata']['content']['html']
+        metadata = data['metadata']
+        
+        logging.debug(f"Content: {content}")
+        logging.debug(f"Metadata: {metadata}")
+
+        # Process the email content here
+        # For now, we'll just return the metadata and a placeholder for content_blocks
+        output_json = {
+            "metadata": metadata,
+            "content_blocks": [{"placeholder": "Content processing logic to be implemented"}]
+        }
+        
+        logging.debug(f"Final output JSON: {output_json}")
+        
+        return jsonify(output_json), 200
+    except KeyError as e:
+        logging.error(f"KeyError: {str(e)}")
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logging.error(f"Error processing email: {str(e)}")
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
