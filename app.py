@@ -8,10 +8,10 @@ app = Flask(__name__)
 def process_email():
     data = request.get_json()
     
-    if not data or 'metadata' not in data or 'from' not in data['metadata']:
-        return jsonify({"error": "Invalid JSON structure or missing 'from' field"}), 400
+    if not data or 'metadata' not in data or 'sender' not in data['metadata']:
+        return jsonify({"error": "Invalid JSON structure or missing 'sender' field"}), 400
     
-    sender = data['metadata']['from']
+    sender = data['metadata']['sender']
     
     if "adage@e.crainalerts.com" in sender:
         return process_creativity_daily(data)
@@ -20,7 +20,4 @@ def process_email():
     else:
         return jsonify({"error": "Unknown newsletter source"}), 400
 
-# Remove the if __name__ == '__main__' block
-
-# Add this line at the end of the file
 application = app
