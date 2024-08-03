@@ -42,7 +42,7 @@ def extract_stories(content):
     soup = BeautifulSoup(content, 'html.parser')
     
     # Find all content blocks
-    content_blocks = soup.find_all(['table', 'td'], class_=['columns', 'full'])
+    content_blocks = soup.find_all('td', class_='padded')
     
     score = 1  # Initialize score to 1
     
@@ -50,19 +50,19 @@ def extract_stories(content):
         story = {'scoring': score}  # Add the score to the story dict
         
         # Extract text
-        text_element = block.find('a', class_='btn')
-        if text_element:
-            story['text'] = text_element.text.strip()
+        headline = block.find('h2')
+        if headline:
+            story['text'] = headline.text.strip()
         
         # Extract link
-        link_element = block.find('a', class_='btn')
-        if link_element:
-            story['link'] = link_element.get('href', '')
+        link = block.find('a', class_='button')
+        if link:
+            story['link'] = link['href']
         
         # Extract image
-        img_element = block.find('img', id='OWATemporaryImageDivContainer1')
-        if img_element:
-            story['image'] = img_element.get('src', '')
+        img = block.find('img')
+        if img:
+            story['image'] = img['src']
         
         # Add other required fields
         story['enrichment_text'] = generate_enrichment_text(story.get('text', ''))
@@ -70,7 +70,7 @@ def extract_stories(content):
         story['sub_category'] = determine_sub_category(story.get('text', ''))
         story['social_trend'] = generate_social_trend(story.get('text', ''))
         
-        if story['text'] and (story['image'] or story['link']):
+        if story.get('text') and (story.get('image') or story.get('link')):
             stories.append(story)
             score += 1  # Increment score for next item
     
@@ -83,12 +83,12 @@ def generate_enrichment_text(text):
 def determine_sub_category(text):
     # This is a simple example. You might use more sophisticated categorization in reality.
     categories = {
-        'News': ['NEWS'],
-        'Reviews': ['REVIEWS'],
-        'Tutorials': ['HOW TO'],
-        'Features': ['FEATURES'],
-        'Inspiration': ['INSPIRATION'],
-        'Buying Guides': ['BUYING GUIDES']
+        'News': ['news', 'latest'],
+        'Reviews': ['review', 'tested'],
+        'Tutorials': ['how to', 'guide', 'tutorial'],
+        'Features': ['feature', 'insight'],
+        'Inspiration': ['inspiration', 'creative'],
+        'Buying Guides': ['best', 'top', 'buy']
     }
     
     for category, keywords in categories.items():

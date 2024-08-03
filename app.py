@@ -2,26 +2,51 @@ from flask import Flask, request, jsonify
 from processor_v1 import process_email as process_creativity_daily
 from processor_v2 import process_email as process_aotw
 from processor_creative_bloq import process_email as process_creative_bloq
+import logging
+import json
+
+logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
 @app.route('/process_email', methods=['POST'])
 def process_email():
-    data = request.get_json()
+    logging.debug(f"Received request data: {request.data}")
+    try:
+        data = json.loads(request.data)
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse JSON: {e}")
+        return jsonify({"error": "Invalid JSON format"}), 400
+
+    if not data:
+        logging.error("No JSON data received")
+        return jsonify({"error": "No JSON data received"}), 400
     
-    if not data or 'metadata' not in data or 'sender' not in data['metadata']:
-        return jsonify({"error": "Invalid JSON structure or missing 'sender' field"}), 400
+    logging.debug(f"Parsed JSON data: {data}")
+    
+    if 'metadata' not in data:
+        logging.error("Missing 'metadata' field in JSON")
+        return jsonify({"error": "Missing 'metadata' field"}), 400
+    
+    if 'sender' not in data['metadata']:
+        logging.error("Missing 'sender' field in metadata")
+        return jsonify({"error": "Missing 'sender' field in metadata"}), 400
     
     sender = data['metadata']['sender']
+    logging.debug(f"Sender: {sender}")
     
     if "adage@e.crainalerts.com" in sender:
+        logging.debug("Processing as Creativity Daily")
         return process_creativity_daily(data)
     elif "newsletter@adsoftheworld.com" in sender:
+        logging.debug("Processing as Ads of the World")
         return process_aotw(data)
-    elif "newsletter@email.creativebloq.com" in sender:
+    elif "creativebloq@smartbrief.com" in sender:
+        logging.debug("Processing as Creative Bloq")
         return process_creative_bloq(data)
     else:
-        return jsonify({"error": "Unknown newsletter source"}), 400
+        logging.error(f"Unknown newsletter source: {sender}")
+        return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
 
 application = app
 
