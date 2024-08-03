@@ -47,7 +47,7 @@ def extract_content_blocks(soup):
                 content['image'] = img_tag.get('src', '')
 
             # Extract headline and link
-            headline_tag = block.find('a', style=lambda value: value and 'font-family: \'Oswald\'' in value)
+            headline_tag = block.find('a', style=lambda value: value and "font-family: 'Oswald'" in value)
             if headline_tag:
                 content['text'] = headline_tag.text.strip()
                 content['link'] = headline_tag.get('href', '')
