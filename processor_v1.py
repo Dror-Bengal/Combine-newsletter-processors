@@ -1,8 +1,10 @@
-from flask import request, jsonify
+from flask import Flask, request, jsonify
 from bs4 import BeautifulSoup
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
+
+app = Flask(__name__)  # Create an instance of the Flask application
 
 def extract_stories(content):
     stories = []
