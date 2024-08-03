@@ -11,14 +11,14 @@ def process_email(data):
         if 'metadata' not in data or 'content' not in data['metadata']:
             raise KeyError("Missing 'content' key in the 'metadata' section of the JSON payload")
 
-        content = data['metadata']['content']['html']
+        content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
-        logging.debug(f"Content: {content}")
+        logging.debug(f"Content: {content_html}")
         logging.debug(f"Metadata: {metadata}")
 
         # Extract stories from the HTML content
-        content_blocks = extract_stories(content)
+        content_blocks = extract_stories(content_html)
         
         logging.debug(f"Extracted content blocks: {content_blocks}")
 
@@ -42,37 +42,48 @@ def extract_stories(content):
     soup = BeautifulSoup(content, 'html.parser')
     
     # Find all content blocks
-    content_blocks = soup.find_all('td', class_='padded')
+    content_blocks = soup.find_all('table', class_='name-59')
     
     score = 1  # Initialize score to 1
     
     for block in content_blocks:
-        story = {'scoring': score}  # Add the score to the story dict
+        # Find the section header
+        section_header = block.find('td', class_='standard_section_header')
+        if section_header:
+            main_category = section_header.text.strip()
+        else:
+            main_category = "Newsletter"
+
+        # Find all story blocks within this section
+        story_blocks = block.find_all('table', class_='name-60')
         
-        # Extract text
-        headline = block.find('h2')
-        if headline:
-            story['text'] = headline.text.strip()
-        
-        # Extract link
-        link = block.find('a', class_='button')
-        if link:
-            story['link'] = link['href']
-        
-        # Extract image
-        img = block.find('img')
-        if img:
-            story['image'] = img['src']
-        
-        # Add other required fields
-        story['enrichment_text'] = generate_enrichment_text(story.get('text', ''))
-        story['main_category'] = "Newsletter"
-        story['sub_category'] = determine_sub_category(story.get('text', ''))
-        story['social_trend'] = generate_social_trend(story.get('text', ''))
-        
-        if story.get('text') and (story.get('image') or story.get('link')):
-            stories.append(story)
-            score += 1  # Increment score for next item
+        for story in story_blocks:
+            story_data = {'scoring': score}
+            
+            # Extract headline
+            headline = story.find('div', attrs={'data-testid': 'copy_headline'})
+            if headline:
+                story_data['text'] = headline.text.strip()
+            
+            # Extract link
+            link = story.find('a', attrs={'data-testid': 'cta_link'})
+            if link:
+                story_data['link'] = link['href']
+            
+            # Extract image
+            img = story.find('img', class_='scale_full_width')
+            if img:
+                story_data['image'] = img['src']
+            
+            # Add other required fields
+            story_data['enrichment_text'] = generate_enrichment_text(story_data.get('text', ''))
+            story_data['main_category'] = main_category
+            story_data['sub_category'] = determine_sub_category(story_data.get('text', ''))
+            story_data['social_trend'] = generate_social_trend(story_data.get('text', ''))
+            
+            if story_data.get('text') and (story_data.get('image') or story_data.get('link')):
+                stories.append(story_data)
+                score += 1  # Increment score for next item
     
     return stories
 
@@ -88,7 +99,10 @@ def determine_sub_category(text):
         'Tutorials': ['how to', 'guide', 'tutorial'],
         'Features': ['feature', 'insight'],
         'Inspiration': ['inspiration', 'creative'],
-        'Buying Guides': ['best', 'top', 'buy']
+        'Buying Guides': ['best', 'top', 'buy'],
+        'Tech News': ['tech', 'technology', 'software', 'hardware'],
+        'Design': ['design', 'logo', 'branding'],
+        'Controversy': ['controversy', 'debate', 'issue']
     }
     
     for category, keywords in categories.items():
