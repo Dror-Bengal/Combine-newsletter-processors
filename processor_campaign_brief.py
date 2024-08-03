@@ -34,28 +34,38 @@ def extract_content_blocks(soup):
     content_blocks = []
     score = 1
 
+    logging.debug("Starting to extract content blocks")
+
     # Find the table with id="rssColumn"
     rss_column = soup.find('table', id='rssColumn')
+    logging.debug(f"Found rssColumn: {rss_column is not None}")
+
     if rss_column:
         # Find all content blocks within the rssColumn
-        for block in rss_column.find_all('div', style=lambda value: value and 'padding-bottom: 10px;' in value):
+        blocks = rss_column.find_all('div', style=lambda value: value and 'padding-bottom: 10px;' in value)
+        logging.debug(f"Found {len(blocks)} potential content blocks")
+
+        for block in blocks:
             content = {}
 
             # Extract image
             img_tag = block.find('img', class_='mc-rss-item-img')
             if img_tag:
                 content['image'] = img_tag.get('src', '')
+                logging.debug(f"Found image: {content['image']}")
 
             # Extract headline and link
             headline_tag = block.find('a', style=lambda value: value and "font-family: 'Oswald'" in value)
             if headline_tag:
                 content['text'] = headline_tag.text.strip()
                 content['link'] = headline_tag.get('href', '')
+                logging.debug(f"Found headline: {content['text']}")
 
             # Extract description
             description_tag = block.find('div', id='rssContent')
             if description_tag:
                 content['description'] = description_tag.text.strip()
+                logging.debug(f"Found description: {content['description'][:50]}...")
 
             # Add other required fields
             content['scoring'] = score
@@ -66,6 +76,9 @@ def extract_content_blocks(soup):
             if content.get('text') and (content.get('image') or content.get('link')):
                 content_blocks.append(content)
                 score += 1
+                logging.debug(f"Added content block {score}")
+            else:
+                logging.debug("Skipped incomplete content block")
 
     logging.debug(f"Extracted {len(content_blocks)} content blocks")
     return content_blocks
