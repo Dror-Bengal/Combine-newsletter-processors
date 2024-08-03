@@ -21,3 +21,6 @@ def process_email():
         return jsonify({"error": "Unknown newsletter source"}), 400
 
 application = app
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

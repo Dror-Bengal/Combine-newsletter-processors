@@ -1,10 +1,40 @@
-from flask import Flask, request, jsonify
+from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
-app = Flask(__name__)  # Create an instance of the Flask application
+def process_email(data):
+    logging.debug(f"Received request data: {data}")
+    try:
+        if 'metadata' not in data or 'content' not in data['metadata']:
+            raise KeyError("Missing 'content' key in the 'metadata' section of the JSON payload")
+
+        content = data['metadata']['content']['html']
+        metadata = data['metadata']
+        
+        logging.debug(f"Content: {content}")
+        logging.debug(f"Metadata: {metadata}")
+
+        # Extract stories from the HTML content
+        content_blocks = extract_stories(content)
+        
+        logging.debug(f"Extracted content blocks: {content_blocks}")
+
+        output_json = {
+            "metadata": metadata,
+            "content_blocks": content_blocks
+        }
+        
+        logging.debug(f"Final output JSON: {output_json}")
+        
+        return jsonify(output_json), 200
+    except KeyError as e:
+        logging.error(f"KeyError: {str(e)}")
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logging.error(f"Error processing email: {str(e)}")
+        return jsonify({"error": str(e)}), 400
 
 def extract_stories(content):
     stories = []
@@ -47,7 +77,7 @@ def extract_stories(content):
         stories.append(story)
     
     return stories
-
+    
 def generate_enrichment_text(text):
     # This is a placeholder. In a real scenario, you might use NLP or AI to generate this.
     return f"Enriched version of: {text[:50]}..."
@@ -71,41 +101,4 @@ def generate_social_trend(text):
     words = text.split()[:2]  # Use first two words of the story
     return f"#{words[0]}{words[1]}" if len(words) > 1 else "#Trending"
 
-@app.route('/process_email', methods=['POST'])
-def process_email():
-    logging.debug(f"Received request data: {request.data}")
-    try:
-        data = request.json
-        logging.debug(f"Parsed JSON data: {data}")
-
-        if 'metadata' not in data or 'content' not in data['metadata']:
-            raise KeyError("Missing 'content' key in the 'metadata' section of the JSON payload")
-
-        content = data['metadata']['content']['html']
-        metadata = data['metadata']
-        
-        logging.debug(f"Content: {content}")
-        logging.debug(f"Metadata: {metadata}")
-
-        # Extract stories from the HTML content
-        content_blocks = extract_stories(content)
-        
-        logging.debug(f"Extracted content blocks: {content_blocks}")
-
-        output_json = {
-            "metadata": metadata,
-            "content_blocks": content_blocks
-        }
-        
-        logging.debug(f"Final output JSON: {output_json}")
-        
-        return jsonify(output_json), 200
-    except KeyError as e:
-        logging.error(f"KeyError: {str(e)}")
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        logging.error(f"Error processing email: {str(e)}")
-        return jsonify({"error": str(e)}), 400
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# Remove the Flask route and app.run() call from this file

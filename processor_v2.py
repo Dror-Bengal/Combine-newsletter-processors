@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
 import re
@@ -6,24 +6,15 @@ import urllib.parse
 
 logging.basicConfig(level=logging.DEBUG)
 
-app = Flask(__name__)
-
-@app.route('/process_email', methods=['POST'])
-def process_email():
-    logging.debug(f"Received request data: {request.data}")
+def process_email(data):
+    logging.debug(f"Received data in process_email: {data}")
     try:
-        data = request.json
-        logging.debug(f"Parsed JSON data: {data}")
-
-        if 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
-            raise KeyError("Invalid JSON structure or missing required fields")
+        if not data or 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
+            return jsonify({"error": "Invalid JSON structure"}), 400
 
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
-        logging.debug(f"Content: {content_html}")
-        logging.debug(f"Metadata: {metadata}")
-
         soup = BeautifulSoup(content_html, 'html.parser')
 
         content_blocks = []
@@ -97,16 +88,12 @@ def process_email():
             "metadata": metadata,
             "content_blocks": final_blocks
         }
-        
-        logging.debug(f"Final output JSON: {output_json}")
-        
+
+        logging.debug(f"Processed output: {output_json}")
         return jsonify(output_json), 200
-    except KeyError as e:
-        logging.error(f"KeyError: {str(e)}")
-        return jsonify({"error": str(e)}), 400
+
     except Exception as e:
         logging.error(f"Error processing email: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+# No Flask app or route decorators in this file
