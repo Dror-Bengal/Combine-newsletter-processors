@@ -42,7 +42,7 @@ def extract_content_blocks(soup):
 
     if rss_column:
         # Find all content blocks within the rssColumn
-        blocks = rss_column.find_all('div', style=lambda value: value and 'padding-bottom: 10px;' in value)
+        blocks = rss_column.find_all('div', style=lambda value: value and 'text-align: left;color: #656565;min-width: 300px;' in value)
         logging.debug(f"Found {len(blocks)} potential content blocks")
 
         for block in blocks:
