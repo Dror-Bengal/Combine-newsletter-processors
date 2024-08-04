@@ -3,6 +3,7 @@ from processor_v1 import process_email as process_creativity_daily
 from processor_v2 import process_email as process_aotw
 from processor_creative_bloq import process_email as process_creative_bloq
 from processor_campaign_brief import process_email as process_campaign_brief
+from processor_adweek_agency_daily import process_email as process_adweek_agency_daily
 import logging
 import json
 
@@ -48,11 +49,12 @@ def process_email():
     elif "no-reply@campaignbrief.com" in sender or "no-reply@campaignbrief.co.nz" in sender:
         logging.debug("Processing as Campaign Brief")
         return process_campaign_brief(data)
+    elif "email@email.adweek.com" in sender:
+        logging.debug("Processing as Adweek Advertising & Agency Daily")
+        return process_adweek_agency_daily(data)
     else:
         logging.error(f"Unknown newsletter source: {sender}")
         return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
-
-application = app
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
