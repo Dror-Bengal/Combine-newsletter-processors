@@ -9,7 +9,12 @@ def process_email(data):
             return jsonify({"error": "Invalid JSON structure"}), 400
 
         content_html = data['metadata']['content']['html']
-        metadata = data['metadata']
+        metadata = {
+            "date": data['metadata'].get('date'),
+            "sender": data['metadata'].get('sender'),
+            "subject": data['metadata'].get('subject'),
+            "Sender name": data['metadata'].get('Sender name')
+        }
         
         soup = BeautifulSoup(content_html, 'html.parser')
 
@@ -28,6 +33,7 @@ def process_email(data):
 def extract_content_blocks(soup):
     content_blocks = []
     score = 1
+    seen_content = set()
 
     # Find all potential content blocks
     blocks = soup.find_all(['table', 'div'], class_=['em_wrapper'])
@@ -40,6 +46,11 @@ def extract_content_blocks(soup):
             link = title_elem.a.get('href', '')
         else:
             continue  # Skip blocks without a title
+
+        # Check for duplicates
+        if title in seen_content:
+            continue
+        seen_content.add(title)
 
         # Extract image
         img_elem = block.find('img', class_='em_full_img')
