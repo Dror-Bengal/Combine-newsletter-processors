@@ -56,5 +56,8 @@ def process_email():
         logging.error(f"Unknown newsletter source: {sender}")
         return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
 
+# Add this line to create the 'application' object that Gunicorn is looking for
+application = app
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
