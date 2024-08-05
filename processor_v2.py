@@ -10,10 +10,9 @@ from requests.exceptions import RequestException, Timeout, TooManyRedirects
 from urllib3.exceptions import MaxRetryError
 import time
 from functools import wraps
-from time import time as current_time
 from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from urllib3.util import Retry
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -159,7 +158,6 @@ def clean_text(text):
     text = re.sub(r'(See Feature|See Full Series|ADVERTISING|See Campaign)', '', text, flags=re.IGNORECASE)
     return re.sub(r'[^\w]+$', '', text.strip())
 
-@circuit_breaker(max_failures=3, reset_time=300)
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 @circuit_breaker
 def scrape_and_process(url, max_redirects=5):
