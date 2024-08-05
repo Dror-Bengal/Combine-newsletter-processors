@@ -6,10 +6,14 @@ from processor_campaign_brief import process_email as process_campaign_brief
 from processor_adweek_agency_daily import process_email as process_adweek_agency_daily
 import logging
 import json
-
-logging.basicConfig(level=logging.DEBUG)
+import os
 
 app = Flask(__name__)
+
+port = int(os.environ.get("PORT", 5000))
+app.run(host='0.0.0.0', port=port)
+
+logging.basicConfig(level=logging.DEBUG)
 
 @app.route('/process_email', methods=['POST'])
 def process_email():

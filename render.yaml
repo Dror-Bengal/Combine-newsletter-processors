@@ -8,8 +8,7 @@ services:
       pip install scipy==1.10.1
       pip install -r requirements.txt
       python -m spacy download en_core_web_sm
-    startCommand: gunicorn app:application --timeout 300 --workers 2 --threads 4 --max-requests 1000 --max-requests-jitter 50
-    envVars:
+startCommand: gunicorn app:application --timeout 300 --workers 2 --threads 4 --max-requests 1000 --max-requests-jitter 50    envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
       - key: SPACY_MODEL_PERMS
