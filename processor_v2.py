@@ -120,20 +120,17 @@ def clean_text(text):
     return re.sub(r'[^\w]+$', '', text.strip())
 
 def scrape_and_process(url):
-    session = HTMLSession()
     try:
-        response = session.get(url, timeout=30)
-        response.html.render(timeout=30)  # This will execute JavaScript
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         # Extract full article text
-        article_text = response.html.find('article', first=True)
-        if article_text:
-            article_text = article_text.text
-        else:
-            article_text = response.html.text
+        article_text = soup.get_text(strip=True)
         
         # Extract YouTube or Vimeo links
-        video_links = extract_video_links(response.html)
+        video_links = extract_video_links(soup)
         
         # Process text with spaCy
         doc = nlp(article_text)
@@ -161,10 +158,10 @@ def scrape_and_process(url):
     finally:
         time.sleep(1)  # Add a delay to avoid rate limiting
 
-def extract_video_links(html):
+def extract_video_links(soup):
     video_links = []
-    for iframe in html.find('iframe'):
-        src = iframe.attrs.get('src', '')
+    for iframe in soup.find_all('iframe'):
+        src = iframe.get('src', '')
         if 'youtube.com' in src or 'vimeo.com' in src:
             video_links.append(src)
     return video_links
