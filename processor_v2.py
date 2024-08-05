@@ -5,11 +5,17 @@ from flask import jsonify
 from bs4 import BeautifulSoup
 import requests
 import spacy
+import os
 
 logging.basicConfig(level=logging.DEBUG)
 
-# Load spaCy model
-nlp = spacy.load("en_core_web_sm")
+# Check if the model is installed, if not, download it
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    logging.info("Downloading spaCy model...")
+    os.system("python -m spacy download en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
 
 def process_email(data):
     logging.debug(f"Received data in process_email: {data}")
