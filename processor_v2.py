@@ -119,12 +119,21 @@ def clean_text(text):
 
 def scrape_and_process(url):
     try:
-        response = requests.get(url, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         article_soup = BeautifulSoup(response.text, 'html.parser')
         
         # Extract full article text
-        article_text = article_soup.get_text(strip=True)
+        article_text = ''
+        content_div = article_soup.find('div', class_=['article-content', 'post-content', 'entry-content'])
+        if content_div:
+            for p in content_div.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                article_text += p.get_text(strip=True) + ' '
+        else:
+            article_text = article_soup.get_text(strip=True)
         
         # Extract YouTube or Vimeo links
         video_links = extract_video_links(article_soup)
@@ -133,7 +142,7 @@ def scrape_and_process(url):
         doc = nlp(article_text)
         
         return {
-            "enrichment_text": article_text,
+            "enrichment_text": article_text[:1000],  # Limit to first 1000 characters
             "short_summary": generate_summary(doc),
             "must_know_points": generate_must_know_points(doc),
             "customers": extract_customers(doc),
@@ -144,7 +153,7 @@ def scrape_and_process(url):
     except Exception as e:
         logging.error(f"Error scraping content: {str(e)}")
         return {
-            "enrichment_text": "Error fetching additional content",
+            "enrichment_text": f"Error fetching additional content: {str(e)}",
             "short_summary": "",
             "must_know_points": [],
             "customers": [],
@@ -159,7 +168,11 @@ def extract_video_links(soup):
         src = iframe.get('src', '')
         if 'youtube.com' in src or 'vimeo.com' in src:
             video_links.append(src)
-    return video_links
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if 'youtube.com' in href or 'vimeo.com' in href:
+            video_links.append(href)
+    return video_links[:3]  # Limit to first 3 video links
 
 def generate_summary(doc):
     return ' '.join([sent.text for sent in doc.sents][:3])
