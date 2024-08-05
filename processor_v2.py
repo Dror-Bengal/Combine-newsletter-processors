@@ -9,6 +9,8 @@ import os
 from requests.exceptions import RequestException, Timeout, TooManyRedirects
 from urllib3.exceptions import MaxRetryError
 import time
+from functools import wraps
+from time import time as current_time
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -19,6 +21,34 @@ except OSError:
     logging.info("Downloading spaCy model...")
     os.system("python -m spacy download en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
+
+def circuit_breaker(max_failures=3, reset_time=300):
+    def decorator(func):
+        failures = {}
+        
+        @wraps(func)
+        def wrapper(url, *args, **kwargs):
+            if url in failures:
+                if failures[url]['count'] >= max_failures and current_time() - failures[url]['time'] < reset_time:
+                    logging.warning(f"Circuit breaker open for {url}")
+                    return {"error": "Circuit breaker open"}
+                elif current_time() - failures[url]['time'] >= reset_time:
+                    failures[url] = {'count': 0, 'time': current_time()}
+            
+            try:
+                result = func(url, *args, **kwargs)
+                failures[url] = {'count': 0, 'time': current_time()}
+                return result
+            except Exception as e:
+                if url not in failures:
+                    failures[url] = {'count': 1, 'time': current_time()}
+                else:
+                    failures[url]['count'] += 1
+                    failures[url]['time'] = current_time()
+                raise
+        
+        return wrapper
+    return decorator
 
 def process_email(data):
     logging.debug(f"Received data in process_email: {data}")
@@ -43,7 +73,10 @@ def process_email(data):
             if block_data:
                 if 'link' in block_data:
                     enriched_data = scrape_and_process(block_data['link'])
-                    block_data.update(enriched_data)
+                    if 'error' in enriched_data:
+                        logging.warning(f"Error enriching block: {enriched_data['error']}")
+                    else:
+                        block_data.update(enriched_data)
                 
                 content_blocks.append(block_data)
                 score += 1
@@ -120,6 +153,7 @@ def clean_text(text):
     text = re.sub(r'(See Feature|See Full Series|ADVERTISING|See Campaign)', '', text, flags=re.IGNORECASE)
     return re.sub(r'[^\w]+$', '', text.strip())
 
+@circuit_breaker(max_failures=3, reset_time=300)
 def scrape_and_process(url, max_redirects=5):
     try:
         logging.info(f"Attempting to scrape content from {url}")
@@ -132,10 +166,15 @@ def scrape_and_process(url, max_redirects=5):
         session = requests.Session()
         
         for _ in range(max_redirects + 1):
-            response = session.get(url, headers=headers, timeout=30, allow_redirects=False)
+            try:
+                response = session.get(url, headers=headers, timeout=30, allow_redirects=False)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                logging.error(f"Request failed for {url}: {str(e)}")
+                return {"error": f"Request failed: {str(e)}"}
             
             if response.is_redirect:
-                if response.headers['Location']:
+                if 'Location' in response.headers:
                     url = response.headers['Location']
                     logging.info(f"Following redirect to: {url}")
                 else:
@@ -146,8 +185,6 @@ def scrape_and_process(url, max_redirects=5):
         else:
             logging.error(f"Too many redirects when scraping content from {url}")
             return {"error": f"Too many redirects when fetching content from {url}"}
-        
-        response.raise_for_status()
         
         logging.debug(f"Response status code: {response.status_code}")
         logging.debug(f"Response URL: {response.url}")
@@ -195,19 +232,6 @@ def scrape_and_process(url, max_redirects=5):
             "video_links": video_links,
             "relevancy": relevancy,
         }
-    except Timeout:
-        logging.error(f"Timeout error scraping content from {url}")
-        return {"error": f"Timeout error fetching content from {url}"}
-    except requests.HTTPError as e:
-        if e.response.status_code == 502:
-            logging.error(f"502 Bad Gateway error when scraping content from {url}")
-            return {"error": "502 Bad Gateway error"}
-        else:
-            logging.error(f"HTTP error {e.response.status_code} when scraping content from {url}")
-            return {"error": f"HTTP error {e.response.status_code}"}
-    except (RequestException, MaxRetryError) as e:
-        logging.error(f"Error scraping content from {url}: {str(e)}")
-        return {"error": f"Error fetching content: {str(e)}"}
     except Exception as e:
         logging.error(f"Unexpected error scraping content from {url}: {str(e)}")
         return {"error": f"Unexpected error: {str(e)}"}
