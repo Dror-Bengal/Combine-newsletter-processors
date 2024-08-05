@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import requests
 import spacy
 import os
-from requests_html import HTMLSession
+from requests.sessions import Session
 import time
 
 logging.basicConfig(level=logging.DEBUG)
@@ -40,6 +40,10 @@ def process_email(data):
         for block in soup.find_all(['div', 'table'], class_=lambda x: x and ('content-block' in x or 'hse-column' in x)):
             block_data = process_block(block, score)
             if block_data:
+                if 'link' in block_data:
+                    enriched_data = scrape_and_process(block_data['link'])
+                    block_data.update(enriched_data)
+                
                 content_blocks.append(block_data)
                 score += 1
 
@@ -96,10 +100,6 @@ def process_block(block, score):
     # Only process block if it has meaningful content
     if block_data['text'] and (block_data['image'] or block_data['link']):
         if block_data['text'].lower() != "advertising":
-            # Scrape and process additional content
-            enriched_data = scrape_and_process(block_data['link'])
-            block_data.update(enriched_data)
-            
             # Calculate total score
             block_data['total_score'] = calculate_total_score(block_data)
 
@@ -122,21 +122,44 @@ def clean_text(text):
 def scrape_and_process(url):
     try:
         logging.info(f"Attempting to scrape content from {url}")
-        response = requests.get(url, timeout=30)
+        time.sleep(2)  # 2-second delay to respect rate limits
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        session = Session()
+        response = session.get(url, headers=headers, timeout=30, allow_redirects=True)
         response.raise_for_status()
+        
+        logging.debug(f"Full response content: {response.text}")
+        
+        # Check if we're still on a redirect page
+        if "You're being redirected" in response.text:
+            logging.info("Detected redirect page, attempting to find the actual content URL")
+            soup = BeautifulSoup(response.text, 'html.parser')
+            redirect_link = soup.find('a', href=True)
+            if redirect_link:
+                actual_url = redirect_link['href']
+                logging.info(f"Found actual content URL: {actual_url}")
+                response = session.get(actual_url, headers=headers, timeout=30)
+                response.raise_for_status()
+            else:
+                logging.error("Could not find redirect link")
+                return {"error": "Redirect link not found"}
         
         logging.info("Successfully retrieved content, parsing with BeautifulSoup")
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        logging.info("Extracting full article text")
+        # Extract full article text
         article_text = soup.get_text(strip=True)
         logging.debug(f"Extracted text (first 100 chars): {article_text[:100]}...")
         
-        logging.info("Extracting video links")
+        # Extract YouTube or Vimeo links
         video_links = extract_video_links(soup)
         logging.debug(f"Found {len(video_links)} video links")
         
-        logging.info("Processing text with spaCy")
+        # Process text with spaCy
         doc = nlp(article_text)
         
         logging.info("Generating summary and extracting information")
@@ -148,7 +171,7 @@ def scrape_and_process(url):
         
         logging.info("Scraping and processing completed successfully")
         return {
-            "enrichment_text": article_text[:1000],
+            "enrichment_text": article_text[:1000],  # Limit to first 1000 characters
             "short_summary": summary,
             "must_know_points": must_know_points,
             "customers": customers,
@@ -167,8 +190,6 @@ def scrape_and_process(url):
             "video_links": [],
             "relevancy": [],
         }
-    finally:
-        time.sleep(1)  # Add a delay to avoid rate limiting
 
 def extract_video_links(soup):
     video_links = []
@@ -209,9 +230,9 @@ def calculate_relevancy(doc):
 
 def calculate_total_score(block_data):
     score = block_data['scoring']
-    score += len(block_data['enrichment_text']) / 1000  # 1 point per 1000 characters
-    score += len(block_data['video_links']) * 2  # 2 points per video link
-    score += len(block_data['relevancy'])  # 1 point per relevant customer
+    score += len(block_data.get('enrichment_text', '')) / 1000  # 1 point per 1000 characters
+    score += len(block_data.get('video_links', [])) * 2  # 2 points per video link
+    score += len(block_data.get('relevancy', []))  # 1 point per relevant customer
     return int(score)
 
 def remove_duplicates(blocks):
