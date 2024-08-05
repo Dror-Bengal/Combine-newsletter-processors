@@ -1,7 +1,6 @@
 import logging
 import re
 import urllib.parse
-from flask import jsonify
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 import requests
 import spacy
@@ -14,6 +13,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import warnings
+from celery import Celery
+from cachetools import TTLCache
+
+celery = Celery('tasks', broker='redis://localhost:6379')
+cache = TTLCache(maxsize=100, ttl=3600)
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -56,12 +60,13 @@ class CircuitBreaker:
 
 circuit_breaker = CircuitBreaker(max_failures=3, reset_time=300)
 
-def process_email(data):
+@celery.task(bind=True)
+def process_email_content(self, data):
     logging.debug(f"process_email in processor_v2.py called with data: {data}")
     try:
         if not data or 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
             logging.error(f"Invalid JSON structure: {data}")
-            return jsonify({"error": "Invalid JSON structure"}), 400
+            return {"error": "Invalid JSON structure"}
 
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
@@ -87,13 +92,17 @@ def process_email(data):
                 content_blocks.append(block_data)
                 score += 1
 
+            # Update task state
+            self.update_state(state='PROGRESS',
+                              meta={'status': f'Processed {len(content_blocks)} blocks'})
+
         # Remove duplicate blocks
         unique_blocks = remove_duplicates(content_blocks)
 
         # Exclude social and address blocks
         final_blocks = [block for block in unique_blocks if not (
-            "Follow Us" in block['text'] or 
-            "The Clios, 104 West 27th Street" in block['text']
+            "Follow Us" in block.get('text', '') or 
+            "The Clios, 104 West 27th Street" in block.get('text', '')
         )]
 
         # Reassign scoring to be consecutive
@@ -106,11 +115,11 @@ def process_email(data):
         }
 
         logging.debug(f"Processed output: {output_json}")
-        return jsonify(output_json), 200
+        return {"result": output_json}
 
     except Exception as e:
         logging.error(f"Error processing email: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return {"error": str(e)}
 
 def process_block(block, score):
     block_data = {
@@ -118,9 +127,9 @@ def process_block(block, score):
         "main_category": "Newsletter",
         "sub_category": "Advertising",
         "social_trend": "",
-        "image": "",  # Initialize with empty string
-        "link": "",   # Initialize with empty string
-        "text": ""    # Initialize with empty string
+        "image": "",
+        "link": "",
+        "text": ""
     }
 
     # Extract image
@@ -137,15 +146,7 @@ def process_block(block, score):
     text = block.get_text(strip=True)
     block_data['text'] = clean_text(text)
 
-    # Only process block if it has meaningful content
-    if block_data['text'] and (block_data['image'] or block_data['link']):
-        if block_data['text'].lower() != "advertising":
-            # Calculate total score
-            block_data['total_score'] = calculate_total_score(block_data)
-
-            return block_data
-    
-    return None
+    return block_data if block_data['text'] and (block_data['image'] or block_data['link']) else None
 
 def clean_image_url(url):
     if url.startswith('https://ci3.googleusercontent.com'):
@@ -162,6 +163,9 @@ def clean_text(text):
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 @circuit_breaker
 def scrape_and_process(url, max_redirects=5):
+    if url in cache:
+        return cache[url]
+
     try:
         logging.info(f"Attempting to scrape content from {url}")
         time.sleep(2)  # 2-second delay to respect rate limits
@@ -171,45 +175,16 @@ def scrape_and_process(url, max_redirects=5):
         }
         
         session = requests.Session()
+        session.max_redirects = max_redirects
         retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
         session.mount('http://', HTTPAdapter(max_retries=retries))
         session.mount('https://', HTTPAdapter(max_retries=retries))
         
-        for _ in range(max_redirects + 1):
-            try:
-                response = session.get(url, headers=headers, timeout=60, allow_redirects=False)
-                response.raise_for_status()
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Request failed for {url}: {str(e)}")
-                return {"error": f"Request failed: {str(e)}"}
-            
-            if response.is_redirect:
-                if 'Location' in response.headers:
-                    url = response.headers['Location']
-                    logging.info(f"Following redirect to: {url}")
-                else:
-                    logging.error("Redirect without Location header")
-                    return {"error": "Redirect without Location header"}
-            else:
-                break
-        else:
-            logging.error(f"Too many redirects when scraping content from {url}")
-            return {"error": f"Too many redirects when fetching content from {url}"}
+        response = session.get(url, headers=headers, timeout=60)
+        response.raise_for_status()
         
         logging.debug(f"Response status code: {response.status_code}")
         logging.debug(f"Response URL: {response.url}")
-        
-        if "You're being redirected" in response.text:
-            logging.info("Detected redirect page, attempting to find the actual content URL")
-            soup = BeautifulSoup(response.text, 'html.parser')
-            redirect_link = soup.find('a', href=True)
-            if redirect_link:
-                actual_url = redirect_link['href']
-                logging.info(f"Found actual content URL: {actual_url}")
-                return scrape_and_process(actual_url, max_redirects - 1)
-            else:
-                logging.error("Could not find redirect link")
-                return {"error": "Redirect link not found"}
         
         logging.info("Successfully retrieved content, parsing with BeautifulSoup")
         with warnings.catch_warnings():
@@ -238,8 +213,7 @@ def scrape_and_process(url, max_redirects=5):
         tags = generate_tags(doc)
         relevancy = calculate_relevancy(doc)
         
-        logging.info("Scraping and processing completed successfully")
-        return {
+        result = {
             "enrichment_text": article_text[:1000],  # Limit to first 1000 characters
             "short_summary": summary,
             "must_know_points": must_know_points,
@@ -248,6 +222,10 @@ def scrape_and_process(url, max_redirects=5):
             "video_links": video_links,
             "relevancy": relevancy,
         }
+        
+        cache[url] = result
+        logging.info("Scraping and processing completed successfully")
+        return result
     except Exception as e:
         logging.error(f"Unexpected error scraping content from {url}: {str(e)}")
         return {"error": f"Scraping failed: {str(e)}"}
@@ -289,21 +267,12 @@ def calculate_relevancy(doc):
     
     return relevancy
 
-def calculate_total_score(block_data):
-    score = block_data['scoring']
-    score += len(block_data.get('enrichment_text', '')) / 1000  # 1 point per 1000 characters
-    score += len(block_data.get('video_links', [])) * 2  # 2 points per video link
-    score += len(block_data.get('relevancy', []))  # 1 point per relevant customer
-    return int(score)
-
 def remove_duplicates(blocks):
     unique_blocks = []
     seen = set()
     for block in blocks:
-        block_key = (block['image'], block['link'], block['text'][:100])
+        block_key = (block.get('image', ''), block.get('link', ''), block.get('text', '')[:100])
         if block_key not in seen:
             seen.add(block_key)
             unique_blocks.append(block)
     return unique_blocks
-
-# No Flask app or route decorators in this file

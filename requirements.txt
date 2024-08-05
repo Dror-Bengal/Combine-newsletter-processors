@@ -15,3 +15,6 @@ scipy==1.10.1
 spacy==3.5.0
 requests-html==0.10.0
 tenacity==8.0.1
+celery==5.2.7
+redis==4.3.4
+cachetools==5.3.0
