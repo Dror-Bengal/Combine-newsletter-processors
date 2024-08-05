@@ -7,7 +7,7 @@ services:
       pip install numpy==1.24.3
       pip install scipy==1.10.1
       pip install -r requirements.txt
-    startCommand: gunicorn app:application --timeout 120
+    startCommand: gunicorn app:application --timeout 300 --workers 2 --threads 4
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0

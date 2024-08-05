@@ -11,6 +11,9 @@ from urllib3.exceptions import MaxRetryError
 import time
 from functools import wraps
 from time import time as current_time
+from tenacity import retry, stop_after_attempt, wait_exponential
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -22,33 +25,36 @@ except OSError:
     os.system("python -m spacy download en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
 
-def circuit_breaker(max_failures=3, reset_time=300):
-    def decorator(func):
-        failures = {}
-        
+class CircuitBreaker:
+    def __init__(self, max_failures=3, reset_time=300):
+        self.max_failures = max_failures
+        self.reset_time = reset_time
+        self.failures = {}
+
+    def __call__(self, func):
         @wraps(func)
         def wrapper(url, *args, **kwargs):
-            if url in failures:
-                if failures[url]['count'] >= max_failures and current_time() - failures[url]['time'] < reset_time:
+            if url in self.failures:
+                if self.failures[url]['count'] >= self.max_failures and time.time() - self.failures[url]['time'] < self.reset_time:
                     logging.warning(f"Circuit breaker open for {url}")
                     return {"error": "Circuit breaker open"}
-                elif current_time() - failures[url]['time'] >= reset_time:
-                    failures[url] = {'count': 0, 'time': current_time()}
+                elif time.time() - self.failures[url]['time'] >= self.reset_time:
+                    self.failures[url] = {'count': 0, 'time': time.time()}
             
             try:
                 result = func(url, *args, **kwargs)
-                failures[url] = {'count': 0, 'time': current_time()}
+                self.failures[url] = {'count': 0, 'time': time.time()}
                 return result
             except Exception as e:
-                if url not in failures:
-                    failures[url] = {'count': 1, 'time': current_time()}
+                if url not in self.failures:
+                    self.failures[url] = {'count': 1, 'time': time.time()}
                 else:
-                    failures[url]['count'] += 1
-                    failures[url]['time'] = current_time()
+                    self.failures[url]['count'] += 1
+                    self.failures[url]['time'] = time.time()
                 raise
-        
         return wrapper
-    return decorator
+
+circuit_breaker = CircuitBreaker(max_failures=3, reset_time=300)
 
 def process_email(data):
     logging.debug(f"Received data in process_email: {data}")
@@ -154,6 +160,8 @@ def clean_text(text):
     return re.sub(r'[^\w]+$', '', text.strip())
 
 @circuit_breaker(max_failures=3, reset_time=300)
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+@circuit_breaker
 def scrape_and_process(url, max_redirects=5):
     try:
         logging.info(f"Attempting to scrape content from {url}")
@@ -164,14 +172,17 @@ def scrape_and_process(url, max_redirects=5):
         }
         
         session = requests.Session()
+        retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+        session.mount('http://', HTTPAdapter(max_retries=retries))
+        session.mount('https://', HTTPAdapter(max_retries=retries))
         
         for _ in range(max_redirects + 1):
             try:
-                response = session.get(url, headers=headers, timeout=30, allow_redirects=False)
+                response = session.get(url, headers=headers, timeout=60, allow_redirects=False)
                 response.raise_for_status()
             except requests.exceptions.RequestException as e:
                 logging.error(f"Request failed for {url}: {str(e)}")
-                return {"error": f"Request failed: {str(e)}"}
+                raise
             
             if response.is_redirect:
                 if 'Location' in response.headers:
@@ -234,7 +245,7 @@ def scrape_and_process(url, max_redirects=5):
         }
     except Exception as e:
         logging.error(f"Unexpected error scraping content from {url}: {str(e)}")
-        return {"error": f"Unexpected error: {str(e)}"}
+        raise
 
 def extract_video_links(soup):
     video_links = []
