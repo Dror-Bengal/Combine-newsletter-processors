@@ -120,7 +120,7 @@ def clean_text(text):
     text = re.sub(r'(See Feature|See Full Series|ADVERTISING|See Campaign)', '', text, flags=re.IGNORECASE)
     return re.sub(r'[^\w]+$', '', text.strip())
 
-def scrape_and_process(url):
+def scrape_and_process(url, max_redirects=5):
     try:
         logging.info(f"Attempting to scrape content from {url}")
         time.sleep(2)  # 2-second delay to respect rate limits
@@ -130,7 +130,23 @@ def scrape_and_process(url):
         }
         
         session = requests.Session()
-        response = session.get(url, headers=headers, timeout=30, allow_redirects=True, max_redirects=5)
+        
+        for _ in range(max_redirects + 1):
+            response = session.get(url, headers=headers, timeout=30, allow_redirects=False)
+            
+            if response.is_redirect:
+                if response.headers['Location']:
+                    url = response.headers['Location']
+                    logging.info(f"Following redirect to: {url}")
+                else:
+                    logging.error("Redirect without Location header")
+                    return {"error": "Redirect without Location header"}
+            else:
+                break
+        else:
+            logging.error(f"Too many redirects when scraping content from {url}")
+            return {"error": f"Too many redirects when fetching content from {url}"}
+        
         response.raise_for_status()
         
         logging.debug(f"Response status code: {response.status_code}")
@@ -143,8 +159,7 @@ def scrape_and_process(url):
             if redirect_link:
                 actual_url = redirect_link['href']
                 logging.info(f"Found actual content URL: {actual_url}")
-                response = session.get(actual_url, headers=headers, timeout=30, allow_redirects=True, max_redirects=5)
-                response.raise_for_status()
+                return scrape_and_process(actual_url, max_redirects - 1)
             else:
                 logging.error("Could not find redirect link")
                 return {"error": "Redirect link not found"}
@@ -183,9 +198,6 @@ def scrape_and_process(url):
     except Timeout:
         logging.error(f"Timeout error scraping content from {url}")
         return {"error": f"Timeout error fetching content from {url}"}
-    except TooManyRedirects:
-        logging.error(f"Too many redirects when scraping content from {url}")
-        return {"error": f"Too many redirects when fetching content from {url}"}
     except requests.HTTPError as e:
         if e.response.status_code == 502:
             logging.error(f"502 Bad Gateway error when scraping content from {url}")
