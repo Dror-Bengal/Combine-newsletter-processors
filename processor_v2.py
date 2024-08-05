@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 import requests
 import spacy
 import os
+from requests_html import HTMLSession
+import time
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -118,25 +120,20 @@ def clean_text(text):
     return re.sub(r'[^\w]+$', '', text.strip())
 
 def scrape_and_process(url):
+    session = HTMLSession()
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        article_soup = BeautifulSoup(response.text, 'html.parser')
+        response = session.get(url, timeout=30)
+        response.html.render(timeout=30)  # This will execute JavaScript
         
         # Extract full article text
-        article_text = ''
-        content_div = article_soup.find('div', class_=['article-content', 'post-content', 'entry-content'])
-        if content_div:
-            for p in content_div.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-                article_text += p.get_text(strip=True) + ' '
+        article_text = response.html.find('article', first=True)
+        if article_text:
+            article_text = article_text.text
         else:
-            article_text = article_soup.get_text(strip=True)
+            article_text = response.html.text
         
         # Extract YouTube or Vimeo links
-        video_links = extract_video_links(article_soup)
+        video_links = extract_video_links(response.html)
         
         # Process text with spaCy
         doc = nlp(article_text)
@@ -151,7 +148,7 @@ def scrape_and_process(url):
             "relevancy": calculate_relevancy(doc),
         }
     except Exception as e:
-        logging.error(f"Error scraping content: {str(e)}")
+        logging.error(f"Error scraping content from {url}: {str(e)}")
         return {
             "enrichment_text": f"Error fetching additional content: {str(e)}",
             "short_summary": "",
@@ -161,18 +158,16 @@ def scrape_and_process(url):
             "video_links": [],
             "relevancy": [],
         }
+    finally:
+        time.sleep(1)  # Add a delay to avoid rate limiting
 
-def extract_video_links(soup):
+def extract_video_links(html):
     video_links = []
-    for iframe in soup.find_all('iframe'):
-        src = iframe.get('src', '')
+    for iframe in html.find('iframe'):
+        src = iframe.attrs.get('src', '')
         if 'youtube.com' in src or 'vimeo.com' in src:
             video_links.append(src)
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        if 'youtube.com' in href or 'vimeo.com' in href:
-            video_links.append(href)
-    return video_links[:3]  # Limit to first 3 video links
+    return video_links
 
 def generate_summary(doc):
     return ' '.join([sent.text for sent in doc.sents][:3])
