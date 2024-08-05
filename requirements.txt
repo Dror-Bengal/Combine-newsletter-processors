@@ -14,3 +14,4 @@ numpy==1.24.3
 scipy==1.10.1
 spacy==3.5.0
 requests-html==0.10.0
+requests==2.26.0

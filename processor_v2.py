@@ -6,7 +6,8 @@ from bs4 import BeautifulSoup
 import requests
 import spacy
 import os
-from requests.sessions import Session
+from requests.exceptions import RequestException, Timeout, TooManyRedirects
+from urllib3.exceptions import MaxRetryError
 import time
 
 logging.basicConfig(level=logging.DEBUG)
@@ -128,13 +129,13 @@ def scrape_and_process(url):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
-        session = Session()
-        response = session.get(url, headers=headers, timeout=30, allow_redirects=True)
+        session = requests.Session()
+        response = session.get(url, headers=headers, timeout=30, allow_redirects=True, max_redirects=5)
         response.raise_for_status()
         
-        logging.debug(f"Full response content: {response.text}")
+        logging.debug(f"Response status code: {response.status_code}")
+        logging.debug(f"Response URL: {response.url}")
         
-        # Check if we're still on a redirect page
         if "You're being redirected" in response.text:
             logging.info("Detected redirect page, attempting to find the actual content URL")
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -142,7 +143,7 @@ def scrape_and_process(url):
             if redirect_link:
                 actual_url = redirect_link['href']
                 logging.info(f"Found actual content URL: {actual_url}")
-                response = session.get(actual_url, headers=headers, timeout=30)
+                response = session.get(actual_url, headers=headers, timeout=30, allow_redirects=True, max_redirects=5)
                 response.raise_for_status()
             else:
                 logging.error("Could not find redirect link")
@@ -179,17 +180,25 @@ def scrape_and_process(url):
             "video_links": video_links,
             "relevancy": relevancy,
         }
-    except Exception as e:
+    except Timeout:
+        logging.error(f"Timeout error scraping content from {url}")
+        return {"error": f"Timeout error fetching content from {url}"}
+    except TooManyRedirects:
+        logging.error(f"Too many redirects when scraping content from {url}")
+        return {"error": f"Too many redirects when fetching content from {url}"}
+    except requests.HTTPError as e:
+        if e.response.status_code == 502:
+            logging.error(f"502 Bad Gateway error when scraping content from {url}")
+            return {"error": "502 Bad Gateway error"}
+        else:
+            logging.error(f"HTTP error {e.response.status_code} when scraping content from {url}")
+            return {"error": f"HTTP error {e.response.status_code}"}
+    except (RequestException, MaxRetryError) as e:
         logging.error(f"Error scraping content from {url}: {str(e)}")
-        return {
-            "enrichment_text": f"Error fetching additional content: {str(e)}",
-            "short_summary": "",
-            "must_know_points": [],
-            "customers": [],
-            "tags": [],
-            "video_links": [],
-            "relevancy": [],
-        }
+        return {"error": f"Error fetching content: {str(e)}"}
+    except Exception as e:
+        logging.error(f"Unexpected error scraping content from {url}: {str(e)}")
+        return {"error": f"Unexpected error: {str(e)}"}
 
 def extract_video_links(soup):
     video_links = []
