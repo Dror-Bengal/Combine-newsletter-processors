@@ -121,28 +121,40 @@ def clean_text(text):
 
 def scrape_and_process(url):
     try:
+        logging.info(f"Attempting to scrape content from {url}")
         response = requests.get(url, timeout=30)
         response.raise_for_status()
         
+        logging.info("Successfully retrieved content, parsing with BeautifulSoup")
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Extract full article text
+        logging.info("Extracting full article text")
         article_text = soup.get_text(strip=True)
+        logging.debug(f"Extracted text (first 100 chars): {article_text[:100]}...")
         
-        # Extract YouTube or Vimeo links
+        logging.info("Extracting video links")
         video_links = extract_video_links(soup)
+        logging.debug(f"Found {len(video_links)} video links")
         
-        # Process text with spaCy
+        logging.info("Processing text with spaCy")
         doc = nlp(article_text)
         
+        logging.info("Generating summary and extracting information")
+        summary = generate_summary(doc)
+        must_know_points = generate_must_know_points(doc)
+        customers = extract_customers(doc)
+        tags = generate_tags(doc)
+        relevancy = calculate_relevancy(doc)
+        
+        logging.info("Scraping and processing completed successfully")
         return {
-            "enrichment_text": article_text[:1000],  # Limit to first 1000 characters
-            "short_summary": generate_summary(doc),
-            "must_know_points": generate_must_know_points(doc),
-            "customers": extract_customers(doc),
-            "tags": generate_tags(doc),
+            "enrichment_text": article_text[:1000],
+            "short_summary": summary,
+            "must_know_points": must_know_points,
+            "customers": customers,
+            "tags": tags,
             "video_links": video_links,
-            "relevancy": calculate_relevancy(doc),
+            "relevancy": relevancy,
         }
     except Exception as e:
         logging.error(f"Error scraping content from {url}: {str(e)}")
