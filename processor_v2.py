@@ -2,7 +2,7 @@ import logging
 import re
 import urllib.parse
 from flask import jsonify
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 import requests
 import spacy
 import os
@@ -13,6 +13,7 @@ from functools import wraps
 from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import warnings
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -56,7 +57,7 @@ class CircuitBreaker:
 circuit_breaker = CircuitBreaker(max_failures=3, reset_time=300)
 
 def process_email(data):
-    logging.debug(f"Received data in process_email: {data}")
+    logging.debug(f"process_email in processor_v2.py called with data: {data}")
     try:
         if not data or 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
             logging.error(f"Invalid JSON structure: {data}")
@@ -180,7 +181,7 @@ def scrape_and_process(url, max_redirects=5):
                 response.raise_for_status()
             except requests.exceptions.RequestException as e:
                 logging.error(f"Request failed for {url}: {str(e)}")
-                raise
+                return {"error": f"Request failed: {str(e)}"}
             
             if response.is_redirect:
                 if 'Location' in response.headers:
@@ -211,7 +212,13 @@ def scrape_and_process(url, max_redirects=5):
                 return {"error": "Redirect link not found"}
         
         logging.info("Successfully retrieved content, parsing with BeautifulSoup")
-        soup = BeautifulSoup(response.text, 'html.parser')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+            soup = BeautifulSoup(response.text, 'html.parser', from_encoding=response.encoding)
+        
+        if not soup.find('body'):
+            logging.error("Invalid page content: No <body> tag found")
+            return {"error": "Invalid page content"}
         
         # Extract full article text
         article_text = soup.get_text(strip=True)
@@ -243,7 +250,7 @@ def scrape_and_process(url, max_redirects=5):
         }
     except Exception as e:
         logging.error(f"Unexpected error scraping content from {url}: {str(e)}")
-        raise
+        return {"error": f"Scraping failed: {str(e)}"}
 
 def extract_video_links(soup):
     video_links = []

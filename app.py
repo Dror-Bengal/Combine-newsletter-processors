@@ -10,9 +10,6 @@ import os
 
 app = Flask(__name__)
 
-port = int(os.environ.get("PORT", 5000))
-app.run(host='0.0.0.0', port=port)
-
 logging.basicConfig(level=logging.DEBUG)
 
 @app.route('/process_email', methods=['POST'])
@@ -60,8 +57,17 @@ def process_email():
         logging.error(f"Unknown newsletter source: {sender}")
         return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
 
+@app.route('/', methods=['GET'])
+def home():
+    return "Newsletter Processor is running", 200
+
+@app.route('/healthz', methods=['GET'])
+def health_check():
+    return "OK", 200
+
 # Add this line to create the 'application' object that Gunicorn is looking for
 application = app
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
