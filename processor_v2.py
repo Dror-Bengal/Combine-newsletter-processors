@@ -21,10 +21,14 @@ def process_email(data):
     logging.debug(f"Received data in process_email: {data}")
     try:
         if not data or 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
+            logging.error(f"Invalid JSON structure: {data}")
             return jsonify({"error": "Invalid JSON structure"}), 400
 
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
+        
+        logging.debug(f"Content HTML (first 500 chars): {content_html[:500]}")
+        logging.debug(f"Metadata: {metadata}")
         
         soup = BeautifulSoup(content_html, 'html.parser')
 
@@ -68,6 +72,9 @@ def process_block(block, score):
         "main_category": "Newsletter",
         "sub_category": "Advertising",
         "social_trend": "",
+        "image": "",  # Initialize with empty string
+        "link": "",   # Initialize with empty string
+        "text": ""    # Initialize with empty string
     }
 
     # Extract image
