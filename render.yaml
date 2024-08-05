@@ -24,8 +24,11 @@ services:
     healthCheckPath: /healthz
     autoDeploy: false
 
-  - type: worker
+  - type: redis
     name: celery-worker
+    ipAllowList: []
+    plan: starter
+    maxmemoryPolicy: noeviction
     env: python
     buildCommand: |
       pip install -U pip
@@ -44,8 +47,7 @@ services:
           property: connectionString
 
   - type: redis
-    name: celery-broker
-    ipAllowList: []  # only allow internal connections
-    plan: starter # or whatever plan you prefer
-
-# ... (rest of your render.yaml file)
+  name: celery-broker
+  ipAllowList: []
+  plan: starter
+  maxmemoryPolicy: noeviction

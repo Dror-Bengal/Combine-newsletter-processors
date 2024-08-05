@@ -1,17 +1,17 @@
 from flask import Flask, request, jsonify
 from processor_v1 import process_email as process_creativity_daily
 from processor_v2 import process_email_content as process_aotw  # Changed this line
-from processor_creative_bloq import process_email as process_creative_bloq
+from processor_creative_bloq import process_email as process_creative_blog
 from processor_campaign_brief import process_email as process_campaign_brief
 from processor_adweek_agency_daily import process_email as process_adweek_agency_daily
 import logging
 import json
 import os
 from celery import Celery
+from celery.exceptions import OperationalError
 
 app = Flask(__name__)
-celery = Celery('tasks', broker='redis://localhost:6379')
-
+celery = Celery('tasks', broker=os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379'))
 logging.basicConfig(level=logging.DEBUG)
 
 @app.route('/process_email', methods=['POST'])
@@ -40,47 +40,62 @@ def process_email():
     sender = data['metadata']['sender']
     logging.debug(f"Sender: {sender}")
     
-    if "adage@e.crainalerts.com" in sender:
-        logging.debug("Processing as Creativity Daily")
-        return process_creativity_daily(data)
-    elif "newsletter@adsoftheworld.com" in sender:
-        logging.debug("Processing as Ads of the World")
-        task = process_aotw.delay(data)
-        return jsonify({"task_id": task.id}), 202
-    elif "creativebloq@smartbrief.com" in sender:
-        logging.debug("Processing as Creative Bloq")
-        return process_creative_bloq(data)
-    elif "no-reply@campaignbrief.com" in sender or "no-reply@campaignbrief.co.nz" in sender:
-        logging.debug("Processing as Campaign Brief")
-        return process_campaign_brief(data)
-    elif "email@email.adweek.com" in sender:
-        logging.debug("Processing as Adweek Advertising & Agency Daily")
-        return process_adweek_agency_daily(data)
-    else:
-        logging.error(f"Unknown newsletter source: {sender}")
-        return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
+    try:
+        if "adage@e.crainalerts.com" in sender:
+            logging.debug("Processing as Creativity Daily")
+            return process_creativity_daily(data)
+        elif "newsletter@adsoftheworld.com" in sender:
+            logging.debug("Processing as Ads of the World")
+            try:
+                task = process_aotw.delay(data)
+                return jsonify({"task_id": task.id}), 202
+            except OperationalError as e:
+                logging.error(f"Celery OperationalError: {str(e)}")
+                return jsonify({"error": "Failed to queue task. Celery may be unavailable."}), 503
+            except Exception as e:
+                logging.error(f"Failed to queue task: {str(e)}")
+                return jsonify({"error": "Failed to process request"}), 500
+        elif "creativebloq@smartbrief.com" in sender:
+            logging.debug("Processing as Creative Bloq")
+            return process_creative_blog(data)
+        elif "no-reply@campaignbrief.com" in sender or "no-reply@campaignbrief.co.nz" in sender:
+            logging.debug("Processing as Campaign Brief")
+            return process_campaign_brief(data)
+        elif "email@email.adweek.com" in sender:
+            logging.debug("Processing as Adweek Advertising & Agency Daily")
+            return process_adweek_agency_daily(data)
+        else:
+            logging.error(f"Unknown newsletter source: {sender}")
+            return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
+    except Exception as e:
+        logging.error(f"Unexpected error in process_email: {str(e)}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
 @app.route('/task_status/<task_id>', methods=['GET'])
 def task_status(task_id):
-    task = process_aotw.AsyncResult(task_id)
-    if task.state == 'PENDING':
-        response = {
-            'state': task.state,
-            'status': 'Task is pending...'
-        }
-    elif task.state != 'FAILURE':
-        response = {
-            'state': task.state,
-            'status': task.info.get('status', '')
-        }
-        if 'result' in task.info:
-            response['result'] = task.info['result']
-    else:
-        response = {
-            'state': task.state,
-            'status': str(task.info)
-        }
-    return jsonify(response)
+    try:
+        task = process_aotw.AsyncResult(task_id)
+        if task.state == 'PENDING':
+            response = {
+                'state': task.state,
+                'status': 'Task is pending...'
+            }
+        elif task.state != 'FAILURE':
+            response = {
+                'state': task.state,
+                'status': task.info.get('status', '')
+            }
+            if 'result' in task.info:
+                response['result'] = task.info['result']
+        else:
+            response = {
+                'state': task.state,
+                'status': str(task.info)
+            }
+        return jsonify(response)
+    except Exception as e:
+        logging.error(f"Error checking task status: {str(e)}")
+        return jsonify({"error": "Failed to check task status"}), 500
 
 @app.route('/', methods=['GET'])
 def home():
@@ -88,7 +103,12 @@ def home():
 
 @app.route('/healthz', methods=['GET'])
 def health_check():
-    return "OK", 200
+    try:
+        celery.control.ping()
+        return "OK", 200
+    except Exception as e:
+        logging.error(f"Health check failed: {str(e)}")
+        return "Service Unavailable", 503
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
