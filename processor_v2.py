@@ -12,7 +12,7 @@ import time
 from functools import wraps
 from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.adapters import HTTPAdapter
-from urllib3.util import Retry
+from urllib3.util.retry import Retry
 
 logging.basicConfig(level=logging.DEBUG)
 

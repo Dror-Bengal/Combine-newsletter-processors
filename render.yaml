@@ -7,9 +7,63 @@ services:
       pip install numpy==1.24.3
       pip install scipy==1.10.1
       pip install -r requirements.txt
-    startCommand: gunicorn app:application --timeout 300 --workers 2 --threads 4
+      python -m spacy download en_core_web_sm
+    startCommand: gunicorn app:application --timeout 300 --workers 2 --threads 4 --max-requests 1000 --max-requests-jitter 50
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
       - key: SPACY_MODEL_PERMS
-        value: 1
+        value: "1"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MAX_RETRIES
+        value: "3"
+      - key: BACKOFF_FACTOR
+        value: "0.3"
+      - key: REQUEST_TIMEOUT
+        value: "30"
+      - key: CIRCUIT_BREAKER_THRESHOLD
+        value: "5"
+      - key: CIRCUIT_BREAKER_TIMEOUT
+        value: "30"
+    healthCheckPath: /healthz
+    healthCheckTimeout: 100
+    autoDeploy: false
+    disk:
+      name: tmp
+      mountPath: /tmp
+      sizeGB: 1
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+      targetMemoryPercent: 80
+      targetCPUPercent: 80
+    domains:
+      - newsletter-processor.yourdomain.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    cron:
+      - command: python cleanup_script.py
+        schedule: "0 0 * * *"
+
+databases:
+  - name: newsletter-db
+    databaseName: newsletter_data
+    user: newsletter_user
+    plan: starter
+
+envVarGroups:
+  - name: newsletter-secrets
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: API_KEY
+        sync: false
