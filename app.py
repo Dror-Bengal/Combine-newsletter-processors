@@ -14,7 +14,10 @@ from celery import Celery
 from celery.exceptions import OperationalError
 
 app = Flask(__name__)
-celery = Celery('tasks', broker=os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379'))
+celery = Celery('tasks', 
+                broker=os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379'),
+                backend=os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379'))
+
 logging.basicConfig(level=logging.DEBUG)
 
 @app.route('/process_email', methods=['POST'])
@@ -79,25 +82,18 @@ def process_email():
             logging.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
 
-        if result and 'content_blocks' in result:
-            translation_tasks = []
+        if result and isinstance(result, dict) and 'content_blocks' in result:
             for block in result['content_blocks']:
-                task = translate_content_block_async.delay(block, target_language='es')
-                translation_tasks.append(task)
-
-            # Wait for all translation tasks to complete
-            for task in translation_tasks:
-                translated_block = task.get()
-                # Update the original block with translated content
-                for key, value in translated_block.items():
-                    if key.startswith('translated_'):
-                        block[key] = value
+                translate_content_block_async.delay(block, target_language='es')
+            
+            # Don't wait for translation results here
+            return jsonify({"message": "Email processed and translation started", "result": result}), 202
 
         return jsonify(result), status_code
 
     except Exception as e:
         logging.error(f"Unexpected error in process_email: {str(e)}")
-        return jsonify({"error": "An unexpected error occurred"}), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/task_status/<task_id>', methods=['GET'])
 def task_status(task_id):

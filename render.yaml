@@ -4,17 +4,9 @@ services:
     env: python
     buildCommand: |
       pip install -U pip
-      pip install numpy==1.24.3 scipy==1.10.1
       pip install -r requirements.txt
-      python -m spacy download en_core_web_sm
     startCommand: gunicorn app:application --timeout 600 --workers 4 --threads 4 --max-requests 500 --max-requests-jitter 50
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.9.0
-      - key: SPACY_MODEL_PERMS
-        value: "1"
-      - key: LOG_LEVEL
-        value: INFO
       - key: CELERY_BROKER_URL
         fromService:
           type: redis
@@ -27,21 +19,15 @@ services:
           property: connectionString
       - key: GOOGLE_TRANSLATE_API_KEY
         sync: false
-    healthCheckPath: /healthz
-    autoDeploy: false
 
   - type: worker
     name: celery-worker
     env: python
     buildCommand: |
       pip install -U pip
-      pip install numpy==1.24.3 scipy==1.10.1
       pip install -r requirements.txt
-      python -m spacy download en_core_web_sm
-    startCommand: celery -A processor_v2.celery worker --loglevel=info
+    startCommand: celery -A app.celery worker --loglevel=info
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.9.0
       - key: CELERY_BROKER_URL
         fromService:
           type: redis
