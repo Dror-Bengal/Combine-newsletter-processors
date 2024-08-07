@@ -1,6 +1,7 @@
 import json
 from bs4 import BeautifulSoup
 from flask import jsonify
+import re
 
 def process_email(data):
     try:
@@ -15,7 +16,6 @@ def process_email(data):
         content_blocks = extract_content_blocks(soup)
         
         output_json = {
-            "metadata": metadata,
             "content_blocks": content_blocks
         }
         
@@ -28,48 +28,56 @@ def extract_content_blocks(soup):
     content_blocks = []
     score = 1
 
-    # Find all content blocks (adjust the selector as needed)
-    blocks = soup.find_all('tr', id='content-blocks')
+    # Extract main image
+    main_image = soup.find('img', src=re.compile(r'NoMercyNoMalice_masthead'))
+    if main_image:
+        content_blocks.append({
+            "text": "",
+            "image": main_image['src'],
+            "link": "",
+            "scoring": score,
+            "enrichment_text": "<placeholder>",
+            "main_category": "Newsletter",
+            "sub_category": "<placeholder>",
+            "social_trend": "<placeholder>"
+        })
+        score += 1
 
-    for block in blocks:
+    # Extract content blocks
+    for block in soup.find_all(['p', 'img']):
         content = {}
 
-        # Extract text (adjust as needed based on the HTML structure)
-        text_element = block.find('h1') or block.find('h2') or block.find('p')
-        if text_element:
-            content['text'] = text_element.text.strip()
+        if block.name == 'img':
+            content['image'] = block.get('src', '')
+            content['text'] = block.get('alt', '')
+        else:
+            content['text'] = block.text.strip()
+            link = block.find('a')
+            if link:
+                content['link'] = link.get('href', '')
 
-        # Extract image (adjust as needed)
-        img_element = block.find('img')
-        if img_element:
-            content['image'] = img_element.get('src', '')
-
-        # Extract link (adjust as needed)
-        link_element = block.find('a')
-        if link_element:
-            content['link'] = link_element.get('href', '')
-
-        # Add other required fields
-        content['scoring'] = score
-        content['enrichment_text'] = "<placeholder>"
-        content['main_category'] = "Newsletter"
-        content['sub_category'] = determine_sub_category(content.get('text', ''))
-        content['social_trend'] = generate_social_trend(content.get('text', ''))
-
-        if content.get('text') and (content.get('image') or content.get('link')):
+        if content.get('text') or content.get('image'):
+            content['scoring'] = score
+            content['enrichment_text'] = "<placeholder>"
+            content['main_category'] = "Newsletter"
+            content['sub_category'] = determine_sub_category(content.get('text', ''))
+            content['social_trend'] = "<placeholder>"
             content_blocks.append(content)
             score += 1
 
     return content_blocks
 
 def determine_sub_category(text):
-    # Implement logic to determine sub-category
-    # For now, return a placeholder
-    return "<placeholder>"
-
-def generate_social_trend(text):
-    # Implement logic to generate social trend
-    # For now, return a placeholder
-    return "<placeholder>"
+    categories = {
+        'Business': ['business', 'company', 'market'],
+        'Technology': ['tech', 'technology', 'digital'],
+        'Sports': ['Olympics', 'athletes', 'sports'],
+        'Media': ['TV', 'streaming', 'audience'],
+    }
+    
+    for category, keywords in categories.items():
+        if any(keyword.lower() in text.lower() for keyword in keywords):
+            return category
+    return "General"
 
 # No Flask app or route decorators in this file
