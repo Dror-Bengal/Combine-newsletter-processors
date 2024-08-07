@@ -12,10 +12,10 @@ def process_email(data):
         
         soup = BeautifulSoup(content_html, 'html.parser')
 
-        content_blocks = extract_content_blocks(soup)
+        content_block = extract_content_block(soup)
         
         output_json = {
-            "content_blocks": content_blocks
+            "content_blocks": [content_block]
         }
         
         return jsonify(output_json), 200
@@ -23,38 +23,26 @@ def process_email(data):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def extract_content_blocks(soup):
-    content_blocks = []
-
+def extract_content_block(soup):
     # Extract main image (if any)
     main_image = soup.find('img', class_='c24')
-    if main_image:
-        content_blocks.append({
-            "text": "",
-            "image": main_image['src'],
-            "link": "",
-            "scoring": 1,
-            "enrichment_text": "<placeholder>",
-            "main_category": "Newsletter",
-            "sub_category": "Header",
-            "social_trend": "<placeholder>"
-        })
+    image_url = main_image['src'] if main_image else ""
 
     # Extract main content
     main_content = extract_main_content(soup)
-    if main_content:
-        content_blocks.append({
-            "text": main_content,
-            "image": "",
-            "link": "",
-            "scoring": 2,
-            "enrichment_text": "<placeholder>",
-            "main_category": "Newsletter",
-            "sub_category": "Main Content",
-            "social_trend": "<placeholder>"
-        })
 
-    return content_blocks
+    content_block = {
+        "text": main_content,
+        "image": image_url,
+        "link": "",
+        "scoring": 1,
+        "enrichment_text": "<placeholder>",
+        "main_category": "Newsletter",
+        "sub_category": "Seth Godin's Blog",
+        "social_trend": "<placeholder>"
+    }
+
+    return content_block
 
 def extract_main_content(soup):
     content_container = soup.find('div', class_='rssDesc')
