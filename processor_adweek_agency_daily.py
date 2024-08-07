@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.DEBUG)
 def process_email(data):
     try:
         if 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
-            return jsonify({"error": "Invalid JSON structure"}), 400
+            return {"error": "Invalid JSON structure"}, 400
 
         content_html = data['metadata']['content']['html']
         metadata = {
@@ -31,11 +31,11 @@ def process_email(data):
             "content_blocks": content_blocks
         }
         
-        return jsonify(output_json), 200
+        return output_json, 200
 
     except Exception as e:
         logging.error(f"Error in process_email: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return {"error": str(e)}, 500
 
 def extract_content_blocks(soup):
     content_blocks = []
@@ -68,8 +68,13 @@ def extract_content_blocks(soup):
         description = desc_elem.text.strip() if desc_elem else ''
 
         # Translate title and description
-        translated_title = translate_text(title)
-        translated_description = translate_text(description)
+        try:
+            translated_title = translate_text(title)
+            translated_description = translate_text(description)
+        except Exception as e:
+            logging.error(f"Translation error: {str(e)}")
+            translated_title = title
+            translated_description = description
 
         # Create content block
         content_block = {

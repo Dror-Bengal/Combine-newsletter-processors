@@ -7,9 +7,17 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
-# Initialize the Google Translate client
-credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '/etc/secrets/birzia-translation-abd35ea601c2.json')
+credentials_path = '/etc/secrets/birzia-translation-abd35ea601c2.json'
+
+logging.debug(f"Credentials path: {credentials_path}")
+logging.debug(f"File exists: {os.path.exists(credentials_path)}")
+logging.debug(f"File permissions: {oct(os.stat(credentials_path).st_mode)[-3:]}")
+
 try:
+    with open(credentials_path, 'r') as f:
+        credentials_json = json.load(f)
+    logging.debug(f"Credentials JSON keys: {credentials_json.keys()}")
+    
     credentials = service_account.Credentials.from_service_account_file(credentials_path)
     translate_client = translate.Client(credentials=credentials)
     logging.debug("Translate client initialized successfully with service account file")

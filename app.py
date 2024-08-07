@@ -47,7 +47,7 @@ def process_email():
         result = None
         if "adage@e.crainalerts.com" in sender:
             logging.debug("Processing as Creativity Daily")
-            result = process_creativity_daily(data)
+            result, status_code = process_creativity_daily(data)
         elif "newsletter@adsoftheworld.com" in sender:
             logging.debug("Processing as Ads of the World")
             try:
@@ -62,19 +62,19 @@ def process_email():
                 return jsonify({"error": "Failed to process request"}), 500
         elif "creativebloq@smartbrief.com" in sender:
             logging.debug("Processing as Creative Bloq")
-            result = process_creative_blog(data)
+            result, status_code = process_creative_blog(data)
         elif "no-reply@campaignbrief.com" in sender or "no-reply@campaignbrief.co.nz" in sender:
             logging.debug("Processing as Campaign Brief")
-            result = process_campaign_brief(data)
+            result, status_code = process_campaign_brief(data)
         elif "email@email.adweek.com" in sender:
             logging.debug("Processing as Adweek Advertising & Agency Daily")
-            result = process_adweek_agency_daily(data)
+            result, status_code = process_adweek_agency_daily(data)
         elif "nomercynomalice@mail.profgalloway.com" in sender:
             logging.debug("Processing as No Mercy No Malice")
-            result = process_no_mercy_no_malice(data)
+            result, status_code = process_no_mercy_no_malice(data)
         elif "notify@sethgodin.com" in sender:
             logging.debug("Processing as Seth Godin's Blog")
-            result = process_seth_godin(data)
+            result, status_code = process_seth_godin(data)
         else:
             logging.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
@@ -93,7 +93,7 @@ def process_email():
                     if key.startswith('translated_'):
                         block[key] = value
 
-        return jsonify(result), 200
+        return jsonify(result), status_code
 
     except Exception as e:
         logging.error(f"Unexpected error in process_email: {str(e)}")
@@ -125,7 +125,18 @@ def task_status(task_id):
         logging.error(f"Error checking task status: {str(e)}")
         return jsonify({"error": "Failed to check task status"}), 500
 
-# The rest of the routes (home, health_check) remain the same...
+@app.route('/healthz', methods=['GET'])
+def health_check():
+    return jsonify({"status": "healthy"}), 200
+
+# Ensure all response data is JSON serializable
+class JSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8')
+        return json.JSONEncoder.default(self, obj)
+
+app.json_encoder = JSONEncoder
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
