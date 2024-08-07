@@ -70,7 +70,7 @@ def extract_content_blocks(soup):
             "link": link,
             "image": image,
             "description": description,
-            "enrichment_text": generate_enrichment_text(title),
+            "enrichment_text": generate_enrichment_text(link),
             "main_category": "Newsletter",
             "sub_category": determine_sub_category(title),
             "social_trend": generate_social_trend(title),
@@ -82,8 +82,9 @@ def extract_content_blocks(soup):
 
     return content_blocks
 
-def generate_enrichment_text(text):
-    return f"Enriched version of: {text[:50]}..."
+def generate_enrichment_text(link):
+    text = get_adweek_article(link)
+    return text
 
 def determine_sub_category(text):
     categories = {
@@ -141,18 +142,6 @@ def get_adweek_article(url):
         else:
             article_body = json_ld_content['articleBody']
 
-    if not article_body:
-        article_body = "Article could not be scraped."
-
-    # Extract article content and other info in a dictionary
-    output_json = {
-        "enrichment_text": article_body,
-        "short_summary": "",
-        "customers": [],
-        "tags": [],
-        "total_score": None
-    }
-
-    return jsonify(output_json)
+    return article_body
 
 # Flask route and app.run() should be in the main app.py file, not here
