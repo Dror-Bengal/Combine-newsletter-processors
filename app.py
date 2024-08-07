@@ -14,72 +14,75 @@ from celery import Celery
 from celery.exceptions import OperationalError
 
 app = Flask(__name__)
-celery = Celery('tasks', 
-                broker=os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379'),
-                backend=os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379'))
 
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+redis_url = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379')
+logger.debug(f"Using Redis URL: {redis_url}")
+
+celery = Celery('tasks', broker=redis_url, backend=redis_url)
 
 @app.route('/process_email', methods=['POST'])
 def process_email():
-    logging.debug(f"Received request data: {request.data}")
+    logger.debug(f"Received request data: {request.data}")
     try:
         data = json.loads(request.data)
     except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse JSON: {e}")
+        logger.error(f"Failed to parse JSON: {e}")
         return jsonify({"error": "Invalid JSON format"}), 400
 
     if not data:
-        logging.error("No JSON data received")
+        logger.error("No JSON data received")
         return jsonify({"error": "No JSON data received"}), 400
     
-    logging.debug(f"Parsed JSON data: {data}")
+    logger.debug(f"Parsed JSON data: {data}")
     
     if 'metadata' not in data:
-        logging.error("Missing 'metadata' field in JSON")
+        logger.error("Missing 'metadata' field in JSON")
         return jsonify({"error": "Missing 'metadata' field"}), 400
     
     if 'sender' not in data['metadata']:
-        logging.error("Missing 'sender' field in metadata")
+        logger.error("Missing 'sender' field in metadata")
         return jsonify({"error": "Missing 'sender' field in metadata"}), 400
     
     sender = data['metadata']['sender']
-    logging.debug(f"Sender: {sender}")
+    logger.debug(f"Sender: {sender}")
     
     try:
         result = None
         if "adage@e.crainalerts.com" in sender:
-            logging.debug("Processing as Creativity Daily")
+            logger.debug("Processing as Creativity Daily")
             result, status_code = process_creativity_daily(data)
         elif "newsletter@adsoftheworld.com" in sender:
-            logging.debug("Processing as Ads of the World")
+            logger.debug("Processing as Ads of the World")
             try:
                 task = process_aotw.delay(data)
-                logging.debug(f"Task created with id: {task.id}")
+                logger.debug(f"Task created with id: {task.id}")
                 return jsonify({"task_id": task.id}), 202
             except OperationalError as e:
-                logging.error(f"Celery OperationalError: {str(e)}")
+                logger.error(f"Celery OperationalError: {str(e)}")
                 return jsonify({"error": "Failed to queue task. Celery may be unavailable."}), 503
             except Exception as e:
-                logging.error(f"Failed to queue task: {str(e)}")
+                logger.error(f"Failed to queue task: {str(e)}")
                 return jsonify({"error": "Failed to process request"}), 500
         elif "creativebloq@smartbrief.com" in sender:
-            logging.debug("Processing as Creative Bloq")
+            logger.debug("Processing as Creative Bloq")
             result, status_code = process_creative_blog(data)
         elif "no-reply@campaignbrief.com" in sender or "no-reply@campaignbrief.co.nz" in sender:
-            logging.debug("Processing as Campaign Brief")
+            logger.debug("Processing as Campaign Brief")
             result, status_code = process_campaign_brief(data)
         elif "email@email.adweek.com" in sender:
-            logging.debug("Processing as Adweek Advertising & Agency Daily")
+            logger.debug("Processing as Adweek Advertising & Agency Daily")
             result, status_code = process_adweek_agency_daily(data)
         elif "nomercynomalice@mail.profgalloway.com" in sender:
-            logging.debug("Processing as No Mercy No Malice")
+            logger.debug("Processing as No Mercy No Malice")
             result, status_code = process_no_mercy_no_malice(data)
         elif "notify@sethgodin.com" in sender:
-            logging.debug("Processing as Seth Godin's Blog")
+            logger.debug("Processing as Seth Godin's Blog")
             result, status_code = process_seth_godin(data)
         else:
-            logging.error(f"Unknown newsletter source: {sender}")
+            logger.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
 
         if result and isinstance(result, dict) and 'content_blocks' in result:
@@ -92,7 +95,7 @@ def process_email():
         return jsonify(result), status_code
 
     except Exception as e:
-        logging.error(f"Unexpected error in process_email: {str(e)}")
+        logger.error(f"Unexpected error in process_email: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/task_status/<task_id>', methods=['GET'])
@@ -118,7 +121,7 @@ def task_status(task_id):
             }
         return jsonify(response)
     except Exception as e:
-        logging.error(f"Error checking task status: {str(e)}")
+        logger.error(f"Error checking task status: {str(e)}")
         return jsonify({"error": "Failed to check task status"}), 500
 
 @app.route('/healthz', methods=['GET'])
