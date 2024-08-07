@@ -4,6 +4,7 @@ from processor_v2 import process_email_content as process_aotw
 from processor_creative_bloq import process_email as process_creative_blog
 from processor_campaign_brief import process_email as process_campaign_brief
 from processor_adweek_agency_daily import process_email as process_adweek_agency_daily
+from processor_no_mercy_no_malice import process_email as process_no_mercy_no_malice
 import logging
 import json
 import os
@@ -65,6 +66,9 @@ def process_email():
         elif "email@email.adweek.com" in sender:
             logging.debug("Processing as Adweek Advertising & Agency Daily")
             return process_adweek_agency_daily(data)
+        elif "nomercynomalice@mail.profgalloway.com" in sender:
+            logging.debug("Processing as No Mercy No Malice")
+            return process_no_mercy_no_malice(data)
         else:
             logging.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
