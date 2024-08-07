@@ -2,6 +2,7 @@ import os
 from google.cloud import translate_v2 as translate
 from cachetools import TTLCache
 import logging
+from celery import shared_task
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -11,7 +12,7 @@ if not api_key:
     logging.error("GOOGLE_TRANSLATE_API_KEY environment variable is not set")
     raise EnvironmentError("GOOGLE_TRANSLATE_API_KEY environment variable is not set")
 
-translate_client = translate.Client.from_api_key(api_key)
+translate_client = translate.Client(client_options={"api_key": api_key})
 logging.debug("Translate client initialized successfully with API key")
 
 # Initialize a cache with a time-to-live of 1 day and max size of 1000 items
@@ -47,9 +48,6 @@ def translate_content_block(block, target_language='es'):
     if 'description' in block:
         block['translated_description'] = translate_text(block['description'], target_language)
     return block
-
-# Add this function for asynchronous translation
-from celery import shared_task
 
 @shared_task
 def translate_content_block_async(block, target_language='es'):
