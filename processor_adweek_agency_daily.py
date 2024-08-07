@@ -1,7 +1,11 @@
-import json
-from bs4 import BeautifulSoup
-from flask import jsonify
 import re
+import json
+import random
+import requests
+from flask import jsonify
+from bs4 import BeautifulSoup
+
+
 
 def process_email(data):
     try:
@@ -100,5 +104,55 @@ def determine_sub_category(text):
 def generate_social_trend(text):
     words = text.split()[:2]  # Use first two words of the title
     return f"#{words[0]}{words[1]}" if len(words) > 1 else "#AdweekTrend"
+
+def get_adweek_article(url):
+    """Fetches an AdWeek article and parses it for the article body and all included links."""
+
+    # Random user agents for each request
+    _useragent_list = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36 Edg/111.0.1661.62',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0'
+    ]
+
+    # Get article with requests
+    response = requests.get(
+        url=url,
+        headers={
+            "User-Agent": random.choice(_useragent_list)
+        }
+    )
+
+    # Parse the HTML content
+    soup = BeautifulSoup(response.content, 'html.parser')
+    doc_object = soup.find('script', type='application/ld+json')
+
+    if doc_object:
+        json_ld_content: dict = json.loads(doc_object.string)
+
+        # HTML type string containing the full article content
+        article_body = ""
+        if json_ld_content.get('sharedContent'):
+            article_body = json_ld_content['sharedContent']['articleBody']
+        else:
+            article_body = json_ld_content['articleBody']
+
+    if not article_body:
+        article_body = "Article could not be scraped."
+
+    # Extract article content and other info in a dictionary
+    output_json = {
+        "enrichment_text": article_body,
+        "short_summary": "",
+        "customers": [],
+        "tags": [],
+        "total_score": None
+    }
+
+    return jsonify(output_json)
 
 # Flask route and app.run() should be in the main app.py file, not here
