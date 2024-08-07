@@ -88,7 +88,7 @@ def generate_enrichment_text(link):
     text = get_adweek_article(link)
     if text.startswith("Error") or text == "Article content not available.":
         return f"Unable to fetch article content. {text}"
-    return text[:500] + "..."  # Trim to first 500 characters
+    return text
 
 def determine_sub_category(text):
     categories = {
