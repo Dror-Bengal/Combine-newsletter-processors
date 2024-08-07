@@ -1,29 +1,28 @@
 import os
-from google.cloud import translate_v2 as translate
+import requests
 from cachetools import TTLCache
 import logging
 from celery import shared_task
 
 logging.basicConfig(level=logging.DEBUG)
 
-# Initialize the Google Translate client with API key
+# Get the API key from environment variable
 api_key = os.environ.get('GOOGLE_TRANSLATE_API_KEY')
 if not api_key:
     logging.error("GOOGLE_TRANSLATE_API_KEY environment variable is not set")
     raise EnvironmentError("GOOGLE_TRANSLATE_API_KEY environment variable is not set")
 
-translate_client = translate.Client(client_options={"api_key": api_key})
-logging.debug("Translate client initialized successfully with API key")
+logging.debug("API key retrieved successfully")
 
 # Initialize a cache with a time-to-live of 1 day and max size of 1000 items
 cache = TTLCache(maxsize=1000, ttl=86400)
 
 def translate_text(text, target_language='es'):
     """
-    Translate text to the target language.
+    Translate text to the target language using Google Translate API.
     Uses caching to avoid unnecessary API calls.
     """
-    if not text:  # Added to handle empty strings
+    if not text:  # Handle empty strings
         return text
 
     cache_key = f"{text}:{target_language}"
@@ -31,8 +30,16 @@ def translate_text(text, target_language='es'):
         return cache[cache_key]
     
     try:
-        result = translate_client.translate(text, target_language=target_language)
-        translated_text = result['translatedText']
+        url = "https://translation.googleapis.com/language/translate/v2"
+        params = {
+            'q': text,
+            'target': target_language,
+            'key': api_key
+        }
+        response = requests.post(url, params=params)
+        response.raise_for_status()  # Raises a HTTPError if the status is 4xx, 5xx
+        result = response.json()
+        translated_text = result['data']['translations'][0]['translatedText']
         cache[cache_key] = translated_text
         return translated_text
     except Exception as e:
@@ -52,3 +59,5 @@ def translate_content_block(block, target_language='es'):
 @shared_task
 def translate_content_block_async(block, target_language='es'):
     return translate_content_block(block, target_language)
+
+logging.debug("translator.py loaded successfully")
