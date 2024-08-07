@@ -8,8 +8,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # Initialize the Google Translate client
-credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', 'birzia-translation-abd35ea601c2.json')
-
+credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '/etc/secrets/birzia-translation-abd35ea601c2.json')
 try:
     credentials = service_account.Credentials.from_service_account_file(credentials_path)
     translate_client = translate.Client(credentials=credentials)
