@@ -4,8 +4,9 @@ import random
 import requests
 from flask import jsonify
 from bs4 import BeautifulSoup
+import logging
 
-
+logging.basicConfig(level=logging.DEBUG)
 
 def process_email(data):
     try:
@@ -32,6 +33,7 @@ def process_email(data):
         return jsonify(output_json), 200
 
     except Exception as e:
+        logging.error(f"Error in process_email: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 def extract_content_blocks(soup):
@@ -84,7 +86,9 @@ def extract_content_blocks(soup):
 
 def generate_enrichment_text(link):
     text = get_adweek_article(link)
-    return text
+    if text.startswith("Error") or text == "Article content not available.":
+        return f"Unable to fetch article content. {text}"
+    return text[:500] + "..."  # Trim to first 500 characters
 
 def determine_sub_category(text):
     categories = {
@@ -108,40 +112,60 @@ def generate_social_trend(text):
 
 def get_adweek_article(url):
     """Fetches an AdWeek article and parses it for the article body and all included links."""
+    logging.info(f"Attempting to fetch article from: {url}")
+    
+    try:
+        # Random user agents for each request
+        _useragent_list = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36 Edg/111.0.1661.62',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0'
+        ]
 
-    # Random user agents for each request
-    _useragent_list = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36 Edg/111.0.1661.62',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0'
-    ]
+        # Get article with requests
+        response = requests.get(
+            url=url,
+            headers={
+                "User-Agent": random.choice(_useragent_list)
+            },
+            timeout=10  # Add a timeout to prevent hanging
+        )
+        response.raise_for_status()  # Raise an exception for bad status codes
 
-    # Get article with requests
-    response = requests.get(
-        url=url,
-        headers={
-            "User-Agent": random.choice(_useragent_list)
-        }
-    )
+        # Parse the HTML content
+        soup = BeautifulSoup(response.content, 'html.parser')
+        doc_object = soup.find('script', type='application/ld+json')
 
-    # Parse the HTML content
-    soup = BeautifulSoup(response.content, 'html.parser')
-    doc_object = soup.find('script', type='application/ld+json')
+        if doc_object:
+            json_ld_content: dict = json.loads(doc_object.string)
 
-    if doc_object:
-        json_ld_content: dict = json.loads(doc_object.string)
-
-        # HTML type string containing the full article content
-        article_body = ""
-        if json_ld_content.get('sharedContent'):
-            article_body = json_ld_content['sharedContent']['articleBody']
+            # HTML type string containing the full article content
+            if json_ld_content.get('sharedContent'):
+                article_body = json_ld_content['sharedContent'].get('articleBody', '')
+            else:
+                article_body = json_ld_content.get('articleBody', '')
+            
+            if not article_body:
+                logging.warning(f"No article body found for URL: {url}")
+                return "Article content not available."
+            
+            return article_body
         else:
-            article_body = json_ld_content['articleBody']
+            logging.warning(f"No ld+json script found for URL: {url}")
+            return "Article content not available."
 
-    return article_body
+    except requests.RequestException as e:
+        logging.error(f"Error fetching article from {url}: {str(e)}")
+        return f"Error fetching article: {str(e)}"
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing JSON from {url}: {str(e)}")
+        return "Error parsing article content."
+    except Exception as e:
+        logging.error(f"Unexpected error processing article from {url}: {str(e)}")
+        return "Unexpected error processing article."
 
 # Flask route and app.run() should be in the main app.py file, not here
