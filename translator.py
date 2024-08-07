@@ -1,29 +1,18 @@
 import os
-import json
-from google.oauth2 import service_account
 from google.cloud import translate_v2 as translate
 from cachetools import TTLCache
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
-credentials_path = '/etc/secrets/birzia-translation-abd35ea601c2.json'
+# Initialize the Google Translate client with API key
+api_key = os.environ.get('GOOGLE_TRANSLATE_API_KEY')
+if not api_key:
+    logging.error("GOOGLE_TRANSLATE_API_KEY environment variable is not set")
+    raise EnvironmentError("GOOGLE_TRANSLATE_API_KEY environment variable is not set")
 
-logging.debug(f"Credentials path: {credentials_path}")
-logging.debug(f"File exists: {os.path.exists(credentials_path)}")
-logging.debug(f"File permissions: {oct(os.stat(credentials_path).st_mode)[-3:]}")
-
-try:
-    with open(credentials_path, 'r') as f:
-        credentials_json = json.load(f)
-    logging.debug(f"Credentials JSON keys: {credentials_json.keys()}")
-    
-    credentials = service_account.Credentials.from_service_account_file(credentials_path)
-    translate_client = translate.Client(credentials=credentials)
-    logging.debug("Translate client initialized successfully with service account file")
-except Exception as e:
-    logging.error(f"Error initializing translate client: {str(e)}")
-    raise
+translate_client = translate.Client.from_api_key(api_key)
+logging.debug("Translate client initialized successfully with API key")
 
 # Initialize a cache with a time-to-live of 1 day and max size of 1000 items
 cache = TTLCache(maxsize=1000, ttl=86400)

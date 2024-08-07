@@ -20,7 +20,12 @@ services:
           type: redis
           name: celery-broker
           property: connectionString
-      - key: GOOGLE_APPLICATION_CREDENTIALS
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: celery-broker
+          property: connectionString
+      - key: GOOGLE_TRANSLATE_API_KEY
         sync: false
     healthCheckPath: /healthz
     autoDeploy: false
@@ -42,7 +47,12 @@ services:
           type: redis
           name: celery-broker
           property: connectionString
-      - key: GOOGLE_APPLICATION_CREDENTIALS
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: celery-broker
+          property: connectionString
+      - key: GOOGLE_TRANSLATE_API_KEY
         sync: false
 
   - type: redis
