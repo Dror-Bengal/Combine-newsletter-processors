@@ -26,7 +26,6 @@ def process_email(data):
 
 def extract_content_blocks(soup):
     content_blocks = []
-    score = 1
 
     # Extract main image
     main_image = soup.find('img', src=re.compile(r'NoMercyNoMalice_masthead'))
@@ -35,49 +34,39 @@ def extract_content_blocks(soup):
             "text": "",
             "image": main_image['src'],
             "link": "",
-            "scoring": score,
+            "scoring": 1,
             "enrichment_text": "<placeholder>",
             "main_category": "Newsletter",
-            "sub_category": "<placeholder>",
+            "sub_category": "Header",
             "social_trend": "<placeholder>"
         })
-        score += 1
 
-    # Extract content blocks
-    for block in soup.find_all(['p', 'img']):
-        content = {}
-
-        if block.name == 'img':
-            content['image'] = block.get('src', '')
-            content['text'] = block.get('alt', '')
-        else:
-            content['text'] = block.text.strip()
-            link = block.find('a')
-            if link:
-                content['link'] = link.get('href', '')
-
-        if content.get('text') or content.get('image'):
-            content['scoring'] = score
-            content['enrichment_text'] = "<placeholder>"
-            content['main_category'] = "Newsletter"
-            content['sub_category'] = determine_sub_category(content.get('text', ''))
-            content['social_trend'] = "<placeholder>"
-            content_blocks.append(content)
-            score += 1
+    # Extract main content
+    main_content = extract_main_content(soup)
+    if main_content:
+        content_blocks.append({
+            "text": main_content,
+            "image": "",
+            "link": "",
+            "scoring": 2,
+            "enrichment_text": "<placeholder>",
+            "main_category": "Newsletter",
+            "sub_category": "Main Content",
+            "social_trend": "<placeholder>"
+        })
 
     return content_blocks
 
-def determine_sub_category(text):
-    categories = {
-        'Business': ['business', 'company', 'market'],
-        'Technology': ['tech', 'technology', 'digital'],
-        'Sports': ['Olympics', 'athletes', 'sports'],
-        'Media': ['TV', 'streaming', 'audience'],
-    }
-    
-    for category, keywords in categories.items():
-        if any(keyword.lower() in text.lower() for keyword in keywords):
-            return category
-    return "General"
+def extract_main_content(soup):
+    # Find the main content container
+    content_container = soup.find('tr', id='content-blocks')
+    if not content_container:
+        return ""
+
+    # Extract all text from paragraphs within the content container
+    paragraphs = content_container.find_all('p')
+    main_content = "\n\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
+
+    return main_content
 
 # No Flask app or route decorators in this file
