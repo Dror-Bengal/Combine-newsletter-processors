@@ -5,6 +5,7 @@ import requests
 from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
+from translator import translate_text  # Import the translation function
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -66,6 +67,10 @@ def extract_content_blocks(soup):
         desc_elem = block.find(['span', 'td'], class_='em_font_15')
         description = desc_elem.text.strip() if desc_elem else ''
 
+        # Translate title and description
+        translated_title = translate_text(title)
+        translated_description = translate_text(description)
+
         # Create content block
         content_block = {
             "text": title,
@@ -76,7 +81,9 @@ def extract_content_blocks(soup):
             "main_category": "Newsletter",
             "sub_category": determine_sub_category(title),
             "social_trend": generate_social_trend(title),
-            "scoring": score
+            "scoring": score,
+            "translated_text": translated_title,
+            "translated_description": translated_description
         }
 
         content_blocks.append(content_block)

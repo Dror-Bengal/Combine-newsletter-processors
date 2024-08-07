@@ -15,6 +15,7 @@ from urllib3.util.retry import Retry
 import warnings
 from celery import Celery
 from cachetools import TTLCache
+from translator import translate_text  # Import the translation function
 
 # Update Celery configuration
 celery = Celery('tasks', broker=os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379'))
@@ -36,7 +37,15 @@ def remove_duplicates(blocks):
 
 def process_block(block, score):
     # Add your implementation for the process_block function here
-    pass
+    block_data = {}  # Assume this is populated with the extracted data
+    
+    # Add translation for text and description
+    if 'text' in block_data:
+        block_data['translated_text'] = translate_text(block_data['text'])
+    if 'description' in block_data:
+        block_data['translated_description'] = translate_text(block_data['description'])
+    
+    return block_data
 
 def scrape_and_process(link):
     # Add your implementation for the scrape_and_process function here

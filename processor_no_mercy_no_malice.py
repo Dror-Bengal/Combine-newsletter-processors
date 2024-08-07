@@ -2,6 +2,7 @@ import json
 from bs4 import BeautifulSoup
 from flask import jsonify
 import re
+from translator import translate_text  # Import the translation function
 
 def process_email(data):
     try:
@@ -38,12 +39,15 @@ def extract_content_blocks(soup):
             "enrichment_text": "<placeholder>",
             "main_category": "Newsletter",
             "sub_category": "Header",
-            "social_trend": "<placeholder>"
+            "social_trend": "<placeholder>",
+            "translated_text": "",  # No text to translate for the image
+            "translated_description": ""  # No description to translate for the image
         })
 
     # Extract main content
     main_content = extract_main_content(soup)
     if main_content:
+        translated_content = translate_text(main_content)
         content_blocks.append({
             "text": main_content,
             "image": "",
@@ -52,7 +56,9 @@ def extract_content_blocks(soup):
             "enrichment_text": "<placeholder>",
             "main_category": "Newsletter",
             "sub_category": "Main Content",
-            "social_trend": "<placeholder>"
+            "social_trend": "<placeholder>",
+            "translated_text": translated_content,
+            "translated_description": ""  # No separate description for this content
         })
 
     return content_blocks

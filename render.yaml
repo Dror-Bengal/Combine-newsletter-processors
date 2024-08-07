@@ -4,8 +4,7 @@ services:
     env: python
     buildCommand: |
       pip install -U pip
-      pip install numpy==1.24.3
-      pip install scipy==1.10.1
+      pip install numpy==1.24.3 scipy==1.10.1
       pip install -r requirements.txt
       python -m spacy download en_core_web_sm
     startCommand: gunicorn app:application --timeout 600 --workers 4 --threads 4 --max-requests 500 --max-requests-jitter 50
@@ -24,16 +23,12 @@ services:
     healthCheckPath: /healthz
     autoDeploy: false
 
-  - type: redis
+  - type: worker
     name: celery-worker
-    ipAllowList: []
-    plan: starter
-    maxmemoryPolicy: noeviction
     env: python
     buildCommand: |
       pip install -U pip
-      pip install numpy==1.24.3
-      pip install scipy==1.10.1
+      pip install numpy==1.24.3 scipy==1.10.1
       pip install -r requirements.txt
       python -m spacy download en_core_web_sm
     startCommand: celery -A processor_v2.celery worker --loglevel=info
@@ -47,7 +42,7 @@ services:
           property: connectionString
 
   - type: redis
-  name: celery-broker
-  ipAllowList: []
-  plan: starter
-  maxmemoryPolicy: noeviction
+    name: celery-broker
+    ipAllowList: []
+    plan: starter
+    maxmemoryPolicy: noeviction

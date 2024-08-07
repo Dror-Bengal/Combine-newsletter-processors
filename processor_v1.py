@@ -1,6 +1,7 @@
 from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
+from translator import translate_text  # Import the translation function
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -57,6 +58,7 @@ def extract_stories(content):
         text_element = block.find(['h2', 'h3', 'p'])
         if text_element:
             story['text'] = text_element.text.strip()
+            story['translated_text'] = translate_text(story['text'])
         
         # Extract link
         link_element = block.find('a')
@@ -73,6 +75,12 @@ def extract_stories(content):
         story['main_category'] = "Newsletter"
         story['sub_category'] = determine_sub_category(story.get('text', ''))
         story['social_trend'] = generate_social_trend(story.get('text', ''))
+        
+        # Add translated description if there's a description
+        if 'description' in story:
+            story['translated_description'] = translate_text(story['description'])
+        else:
+            story['translated_description'] = ""
         
         stories.append(story)
     

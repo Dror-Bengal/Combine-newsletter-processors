@@ -2,6 +2,7 @@ from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
 import re
+from translator import translate_text  # Import the translation function
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -72,6 +73,10 @@ def extract_content_blocks(soup):
             content['main_category'] = "Newsletter"
             content['sub_category'] = determine_sub_category(content.get('text', ''))
             content['social_trend'] = generate_social_trend(content.get('text', ''))
+
+            # Add translated fields
+            content['translated_text'] = translate_text(content.get('text', ''))
+            content['translated_description'] = translate_text(content.get('description', ''))
 
             if content.get('text') and (content.get('image') or content.get('link')):
                 content_blocks.append(content)

@@ -6,6 +6,7 @@ from processor_campaign_brief import process_email as process_campaign_brief
 from processor_adweek_agency_daily import process_email as process_adweek_agency_daily
 from processor_no_mercy_no_malice import process_email as process_no_mercy_no_malice
 from processor_seth_godin import process_email as process_seth_godin
+from translator import translate_content_block, translate_content_block_async
 import logging
 import json
 import os
@@ -43,9 +44,10 @@ def process_email():
     logging.debug(f"Sender: {sender}")
     
     try:
+        result = None
         if "adage@e.crainalerts.com" in sender:
             logging.debug("Processing as Creativity Daily")
-            return process_creativity_daily(data)
+            result = process_creativity_daily(data)
         elif "newsletter@adsoftheworld.com" in sender:
             logging.debug("Processing as Ads of the World")
             try:
@@ -60,22 +62,39 @@ def process_email():
                 return jsonify({"error": "Failed to process request"}), 500
         elif "creativebloq@smartbrief.com" in sender:
             logging.debug("Processing as Creative Bloq")
-            return process_creative_blog(data)
+            result = process_creative_blog(data)
         elif "no-reply@campaignbrief.com" in sender or "no-reply@campaignbrief.co.nz" in sender:
             logging.debug("Processing as Campaign Brief")
-            return process_campaign_brief(data)
+            result = process_campaign_brief(data)
         elif "email@email.adweek.com" in sender:
             logging.debug("Processing as Adweek Advertising & Agency Daily")
-            return process_adweek_agency_daily(data)
+            result = process_adweek_agency_daily(data)
         elif "nomercynomalice@mail.profgalloway.com" in sender:
             logging.debug("Processing as No Mercy No Malice")
-            return process_no_mercy_no_malice(data)
+            result = process_no_mercy_no_malice(data)
         elif "notify@sethgodin.com" in sender:
             logging.debug("Processing as Seth Godin's Blog")
-            return process_seth_godin(data)
+            result = process_seth_godin(data)
         else:
             logging.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
+
+        if result and 'content_blocks' in result:
+            translation_tasks = []
+            for block in result['content_blocks']:
+                task = translate_content_block_async.delay(block, target_language='es')
+                translation_tasks.append(task)
+
+            # Wait for all translation tasks to complete
+            for task in translation_tasks:
+                translated_block = task.get()
+                # Update the original block with translated content
+                for key, value in translated_block.items():
+                    if key.startswith('translated_'):
+                        block[key] = value
+
+        return jsonify(result), 200
+
     except Exception as e:
         logging.error(f"Unexpected error in process_email: {str(e)}")
         return jsonify({"error": "An unexpected error occurred"}), 500
