@@ -17,7 +17,7 @@ logging.debug("API key retrieved successfully")
 # Initialize a cache with a time-to-live of 1 day and max size of 1000 items
 cache = TTLCache(maxsize=1000, ttl=86400)
 
-def translate_text(text, target_language='es'):
+def translate_text(text, target_language='he'):
     """
     Translate text to the target language using Google Translate API.
     Uses caching to avoid unnecessary API calls.
@@ -46,7 +46,7 @@ def translate_text(text, target_language='es'):
         logging.error(f"Translation error: {str(e)}")
         return text  # Return original text if translation fails
 
-def translate_content_block(block, target_language='es'):
+def translate_content_block(block, target_language='he'):
     """
     Translate the 'text' and 'description' fields of a content block.
     """
@@ -57,7 +57,7 @@ def translate_content_block(block, target_language='es'):
     return block
 
 @shared_task
-def translate_content_block_async(block, target_language='es'):
+def translate_content_block_async(block, target_language='he'):
     return translate_content_block(block, target_language)
 
 logging.debug("translator.py loaded successfully")

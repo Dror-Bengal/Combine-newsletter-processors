@@ -87,7 +87,7 @@ def process_email():
 
         if result and isinstance(result, dict) and 'content_blocks' in result:
             for block in result['content_blocks']:
-                translate_content_block_async.delay(block, target_language='es')
+                translate_content_block_async.delay(block, target_language='he')
             
             # Don't wait for translation results here
             return jsonify({"message": "Email processed and translation started", "result": result}), 202
