@@ -8,21 +8,15 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # Initialize the Google Translate client
-if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-    logging.debug("GOOGLE_APPLICATION_CREDENTIALS environment variable found")
-    if os.environ['GOOGLE_APPLICATION_CREDENTIALS'].startswith('{'):
-        logging.debug("Credentials appear to be a JSON string")
-        credentials_info = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
-        credentials = service_account.Credentials.from_service_account_info(credentials_info)
-        translate_client = translate.Client(credentials=credentials)
-    else:
-        logging.debug("Using default file-based credentials")
-        translate_client = translate.Client()
-else:
-    logging.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
-    raise EnvironmentError("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', 'birzia-translation-abd35ea601c2.json')
 
-logging.debug("Translate client initialized successfully")
+try:
+    credentials = service_account.Credentials.from_service_account_file(credentials_path)
+    translate_client = translate.Client(credentials=credentials)
+    logging.debug("Translate client initialized successfully with service account file")
+except Exception as e:
+    logging.error(f"Error initializing translate client: {str(e)}")
+    raise
 
 # Initialize a cache with a time-to-live of 1 day and max size of 1000 items
 cache = TTLCache(maxsize=1000, ttl=86400)
@@ -57,3 +51,10 @@ def translate_content_block(block, target_language='es'):
     if 'description' in block:
         block['translated_description'] = translate_text(block['description'], target_language)
     return block
+
+# Add this function for asynchronous translation
+from celery import shared_task
+
+@shared_task
+def translate_content_block_async(block, target_language='es'):
+    return translate_content_block(block, target_language)
