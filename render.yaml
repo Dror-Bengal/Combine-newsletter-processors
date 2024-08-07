@@ -20,6 +20,8 @@ services:
           type: redis
           name: celery-broker
           property: connectionString
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false
     healthCheckPath: /healthz
     autoDeploy: false
 
@@ -40,6 +42,8 @@ services:
           type: redis
           name: celery-broker
           property: connectionString
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false
 
   - type: redis
     name: celery-broker
