@@ -4,6 +4,7 @@ from processor_v2 import process_email_content as process_aotw
 from processor_creative_bloq import process_email as process_creative_blog
 from processor_campaign_brief import process_email as process_campaign_brief
 from processor_adweek_agency import process_email as process_adweek_agency_daily
+from processor_adweek_daily import process_email as process_adweek_daily
 from processor_no_mercy_no_malice import process_email as process_no_mercy_no_malice
 from processor_seth_godin import process_email as process_seth_godin
 from translator import translate_content_block, translate_content_block_async
@@ -73,8 +74,12 @@ def process_email():
             logger.debug("Processing as Campaign Brief")
             result, status_code = process_campaign_brief(data)
         elif "email@email.adweek.com" in sender:
-            logger.debug("Processing as Adweek Advertising & Agency Daily")
-            result, status_code = process_adweek_agency_daily(data)
+            if "Adweek Daily" in data['metadata'].get('Sender name', ''):
+                logger.debug("Processing as Adweek Daily")
+                result, status_code = process_adweek_daily(data)
+            else:
+                logger.debug("Processing as Adweek Advertising & Agency Daily")
+                result, status_code = process_adweek_agency_daily(data)
         elif "nomercynomalice@mail.profgalloway.com" in sender:
             logger.debug("Processing as No Mercy No Malice")
             result, status_code = process_no_mercy_no_malice(data)
