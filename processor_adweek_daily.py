@@ -1,10 +1,10 @@
 import logging
-import random  # Add this line to import the random module
 from bs4 import BeautifulSoup
 from flask import jsonify
 from translator import translate_text, translate_content_block_async
 import requests
 import json
+import random
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -22,42 +22,78 @@ def process_email(data):
             "Sender name": data['metadata'].get('Sender name')
         }
         
+        logger.debug(f"Processing email with subject: {metadata['subject']}")
+        
         soup = BeautifulSoup(content_html, 'html.parser')
 
         content_blocks = extract_content_blocks(soup)
         
+        logger.debug(f"Extracted {len(content_blocks)} content blocks")
+
+        # Translate content blocks
+        for block in content_blocks:
+            block['translated_text'] = translate_text(block['text'])
+            if 'description' in block and block['description']:
+                block['translated_description'] = translate_text(block['description'])
+            if 'enrichment_text' in block and block['enrichment_text']:
+                block['translated_enrichment_text'] = translate_text(block['enrichment_text'])
+
         output_json = {
             "metadata": metadata,
             "content_blocks": content_blocks
         }
         
+        logger.debug(f"Finished processing email. Output JSON has {len(output_json['content_blocks'])} content blocks")
         return output_json, 200
 
     except Exception as e:
-        logger.error(f"Error in process_email: {str(e)}")
+        logger.error(f"Error in process_email: {str(e)}", exc_info=True)
         return {"error": str(e)}, 500
 
 def extract_content_blocks(soup):
     content_blocks = []
     
+    logger.debug("Starting content block extraction")
+
     # Extract main story
-    main_story = extract_main_story(soup)
-    if main_story:
-        content_blocks.append(main_story)
-    
+    try:
+        main_story = extract_main_story(soup)
+        if main_story:
+            content_blocks.append(main_story)
+            logger.debug("Main story extracted successfully")
+        else:
+            logger.warning("No main story found")
+    except Exception as e:
+        logger.error(f"Error extracting main story: {str(e)}", exc_info=True)
+
     # Extract Today's Top Stories
-    top_stories = extract_top_stories(soup)
-    content_blocks.extend(top_stories)
+    try:
+        top_stories = extract_top_stories(soup)
+        content_blocks.extend(top_stories)
+        logger.debug(f"Extracted {len(top_stories)} top stories")
+    except Exception as e:
+        logger.error(f"Error extracting top stories: {str(e)}", exc_info=True)
     
     # Extract More News & Highlights
-    more_news = extract_more_news(soup)
-    content_blocks.extend(more_news)
+    try:
+        more_news = extract_more_news(soup)
+        content_blocks.extend(more_news)
+        logger.debug(f"Extracted {len(more_news)} more news items")
+    except Exception as e:
+        logger.error(f"Error extracting more news: {str(e)}", exc_info=True)
     
     # Extract One More Thing
-    one_more_thing = extract_one_more_thing(soup)
-    if one_more_thing:
-        content_blocks.append(one_more_thing)
+    try:
+        one_more_thing = extract_one_more_thing(soup)
+        if one_more_thing:
+            content_blocks.append(one_more_thing)
+            logger.debug("One More Thing extracted successfully")
+        else:
+            logger.warning("No One More Thing found")
+    except Exception as e:
+        logger.error(f"Error extracting One More Thing: {str(e)}", exc_info=True)
     
+    logger.debug(f"Finished extracting content blocks. Total blocks: {len(content_blocks)}")
     return content_blocks
 
 def extract_main_story(soup):
@@ -176,8 +212,10 @@ def generate_enrichment_text(link):
         article_body = get_adweek_article(link)
         if article_body != "Article content not available.":
             return article_body[:500]  # Limit to 500 characters
+        else:
+            logger.warning(f"No article body found for link: {link}")
     except Exception as e:
-        logger.error(f"Error generating enrichment text: {str(e)}")
+        logger.error(f"Error generating enrichment text: {str(e)}", exc_info=True)
     return ""
 
 def get_adweek_article(url):
@@ -224,13 +262,13 @@ def get_adweek_article(url):
             return "Article content not available."
 
     except requests.RequestException as e:
-        logger.error(f"Error fetching article from {url}: {str(e)}")
+        logger.error(f"Error fetching article from {url}: {str(e)}", exc_info=True)
         return f"Error fetching article: {str(e)}"
     except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON from {url}: {str(e)}")
+        logger.error(f"Error parsing JSON from {url}: {str(e)}", exc_info=True)
         return "Error parsing article content."
     except Exception as e:
-        logger.error(f"Unexpected error processing article from {url}: {str(e)}")
+        logger.error(f"Unexpected error processing article from {url}: {str(e)}", exc_info=True)
         return "Unexpected error processing article."
 
 def determine_sub_category(text):
