@@ -5,6 +5,7 @@ import logging
 from celery import shared_task
 
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Get the API key from environment variable
 api_key = os.environ.get('GOOGLE_TRANSLATE_API_KEY')
@@ -25,7 +26,7 @@ def translate_text(text, target_language='he'):
     if not text:  # Handle empty strings
         return text
 
-    cache_key = f"{text}:{target_language}"
+    cache_key = f"{text[:100]}:{target_language}"  # Use first 100 chars for cache key
     if cache_key in cache:
         return cache[cache_key]
     
@@ -46,18 +47,29 @@ def translate_text(text, target_language='he'):
         logging.error(f"Translation error: {str(e)}")
         return text  # Return original text if translation fails
 
+def translate_long_text(text, target_language='he', max_length=5000):
+    """
+    Translate long text by splitting it into chunks.
+    """
+    chunks = [text[i:i+max_length] for i in range(0, len(text), max_length)]
+    translated_chunks = [translate_text(chunk, target_language) for chunk in chunks]
+    return ' '.join(translated_chunks)
+
 def translate_content_block(block, target_language='he'):
     """
-    Translate the 'text' and 'description' fields of a content block.
+    Translate the 'text', 'description', and 'enrichment_text' fields of a content block.
     """
-    if 'text' in block:
-        block['translated_text'] = translate_text(block['text'], target_language)
-    if 'description' in block:
-        block['translated_description'] = translate_text(block['description'], target_language)
+    for field in ['text', 'description', 'enrichment_text']:
+        if field in block and block[field]:
+            logger.info(f"Translating {field} (length: {len(block[field])})")
+            if len(block[field]) > 5000:
+                block[f'translated_{field}'] = translate_long_text(block[field], target_language)
+            else:
+                block[f'translated_{field}'] = translate_text(block[field], target_language)
     return block
 
 @shared_task
 def translate_content_block_async(block, target_language='he'):
     return translate_content_block(block, target_language)
 
-logging.debug("translator.py loaded successfully")
+logger.debug("translator.py loaded successfully")

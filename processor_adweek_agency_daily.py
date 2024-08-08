@@ -5,7 +5,7 @@ import requests
 from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
-from translator import translate_text
+from translator import translate_text, translate_long_text
 from celery import shared_task
 
 logging.basicConfig(level=logging.DEBUG)
@@ -65,32 +65,41 @@ def extract_content_blocks(soup):
         desc_elem = block.find(['span', 'td'], class_='em_font_15')
         description = desc_elem.text.strip() if desc_elem else ''
 
-        try:
-            translated_title = translate_text(title)
-            translated_description = translate_text(description)
-        except Exception as e:
-            logger.error(f"Translation error: {str(e)}")
-            translated_title = title
-            translated_description = description
+        enrichment_text = generate_enrichment_text(link)
 
         content_block = {
             "text": title,
             "link": link,
             "image": image,
             "description": description,
-            "enrichment_text": generate_enrichment_text(link),
+            "enrichment_text": enrichment_text,
             "main_category": "Newsletter",
             "sub_category": determine_sub_category(title),
             "social_trend": generate_social_trend(title),
             "scoring": score,
-            "translated_text": translated_title,
-            "translated_description": translated_description
         }
+
+        translate_block_content(content_block)
 
         content_blocks.append(content_block)
         score += 1
 
     return content_blocks
+
+def translate_block_content(block):
+    try:
+        for field in ['text', 'description', 'enrichment_text']:
+            if field in block and block[field]:
+                logger.info(f"Translating {field} (length: {len(block[field])})")
+                if len(block[field]) > 5000:
+                    block[f'translated_{field}'] = translate_long_text(block[field])
+                else:
+                    block[f'translated_{field}'] = translate_text(block[field])
+    except Exception as e:
+        logger.error(f"Translation error: {str(e)}")
+        for field in ['text', 'description', 'enrichment_text']:
+            if field in block:
+                block[f'translated_{field}'] = block[field]
 
 def generate_enrichment_text(link):
     text = get_adweek_article(link)
