@@ -3,7 +3,7 @@ from processor_v1 import process_email as process_creativity_daily
 from processor_v2 import process_email_content as process_aotw
 from processor_creative_bloq import process_email as process_creative_blog
 from processor_campaign_brief import process_email as process_campaign_brief
-from processor_adweek_agency_daily import process_email as process_adweek_agency_daily
+from processor_adweek_agency import process_email as process_adweek_agency_daily
 from processor_no_mercy_no_malice import process_email as process_no_mercy_no_malice
 from processor_seth_godin import process_email as process_seth_godin
 from translator import translate_content_block, translate_content_block_async
