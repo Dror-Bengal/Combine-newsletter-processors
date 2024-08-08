@@ -22,28 +22,15 @@ def process_email(data):
             "Sender name": data['metadata'].get('Sender name')
         }
         
-        logger.debug(f"Processing email with subject: {metadata['subject']}")
-        
         soup = BeautifulSoup(content_html, 'html.parser')
 
         content_blocks = extract_content_blocks(soup)
         
-        logger.debug(f"Extracted {len(content_blocks)} content blocks")
-
-        # Translate content blocks
-        for block in content_blocks:
-            block['translated_text'] = translate_text(block['text'])
-            if 'description' in block and block['description']:
-                block['translated_description'] = translate_text(block['description'])
-            if 'enrichment_text' in block and block['enrichment_text']:
-                block['translated_enrichment_text'] = translate_text(block['enrichment_text'])
-
         output_json = {
             "metadata": metadata,
             "content_blocks": content_blocks
         }
         
-        logger.debug(f"Finished processing email. Output JSON has {len(output_json['content_blocks'])} content blocks")
         return output_json, 200
 
     except Exception as e:
@@ -53,158 +40,112 @@ def process_email(data):
 def extract_content_blocks(soup):
     content_blocks = []
     
-    logger.debug("Starting content block extraction")
-
     # Extract main story
-    try:
-        main_story = extract_main_story(soup)
-        if main_story:
-            content_blocks.append(main_story)
-            logger.debug("Main story extracted successfully")
-        else:
-            logger.warning("No main story found")
-    except Exception as e:
-        logger.error(f"Error extracting main story: {str(e)}", exc_info=True)
-
+    main_story = extract_main_story(soup)
+    if main_story:
+        content_blocks.append(main_story)
+    
     # Extract Today's Top Stories
-    try:
-        top_stories = extract_top_stories(soup)
-        content_blocks.extend(top_stories)
-        logger.debug(f"Extracted {len(top_stories)} top stories")
-    except Exception as e:
-        logger.error(f"Error extracting top stories: {str(e)}", exc_info=True)
+    top_stories = extract_top_stories(soup)
+    content_blocks.extend(top_stories)
     
     # Extract More News & Highlights
-    try:
-        more_news = extract_more_news(soup)
-        content_blocks.extend(more_news)
-        logger.debug(f"Extracted {len(more_news)} more news items")
-    except Exception as e:
-        logger.error(f"Error extracting more news: {str(e)}", exc_info=True)
+    more_news = extract_more_news(soup)
+    content_blocks.extend(more_news)
     
     # Extract One More Thing
-    try:
-        one_more_thing = extract_one_more_thing(soup)
-        if one_more_thing:
-            content_blocks.append(one_more_thing)
-            logger.debug("One More Thing extracted successfully")
-        else:
-            logger.warning("No One More Thing found")
-    except Exception as e:
-        logger.error(f"Error extracting One More Thing: {str(e)}", exc_info=True)
+    one_more_thing = extract_one_more_thing(soup)
+    if one_more_thing:
+        content_blocks.append(one_more_thing)
     
-    logger.debug(f"Finished extracting content blocks. Total blocks: {len(content_blocks)}")
     return content_blocks
 
 def extract_main_story(soup):
-    # Implementation for extracting the main story
-    pass
-
-def extract_top_stories(soup):
-    # Implementation for extracting Today's Top Stories
-    pass
-
-def extract_more_news(soup):
-    # Implementation for extracting More News & Highlights
-    pass
-
-def extract_one_more_thing(soup):
-    # Implementation for extracting One More Thing
-    pass
-
-def generate_enrichment_text(link):
-    # Implementation for generating enrichment text from the link
-    pass
-
-def determine_sub_category(text):
-    # Implementation for determining the sub-category
-    pass
-
-def generate_social_trend(text):
-    # Implementation for generating social trend
-    pass
-def extract_main_story(soup):
-    main_story = soup.find('div', class_='content-block')
+    main_story = soup.find('tr', id='content-blocks')
     if main_story:
-        headline = main_story.find('h2').text.strip() if main_story.find('h2') else ''
-        link = main_story.find('a')['href'] if main_story.find('a') else ''
-        image = main_story.find('img')['src'] if main_story.find('img') else ''
-        text = main_story.find('p').text.strip() if main_story.find('p') else ''
+        title = main_story.find('h1')
+        link = main_story.find('a', href=True)
+        image = main_story.find('img', src=True)
+        paragraphs = main_story.find_all('p')
         
         return {
-            'text': headline,
-            'link': link,
-            'image': image,
-            'description': text,
+            'text': title.text.strip() if title else '',
+            'link': link['href'] if link else '',
+            'image': image['src'] if image else '',
+            'description': ' '.join([p.text.strip() for p in paragraphs]),
             'scoring': 1,
-            'enrichment_text': generate_enrichment_text(link),
+            'enrichment_text': generate_enrichment_text(link['href'] if link else ''),
             'main_category': "Newsletter",
-            'sub_category': determine_sub_category(headline),
-            'social_trend': generate_social_trend(headline)
+            'sub_category': determine_sub_category(title.text if title else ''),
+            'social_trend': generate_social_trend(title.text if title else '')
         }
     return None
 
 def extract_top_stories(soup):
     top_stories = []
-    stories_section = soup.find('div', text="Today's Top Stories").find_next('table') if soup.find('div', text="Today's Top Stories") else None
+    stories_section = soup.find('tr', text=lambda t: t and "Today's Top Stories" in t)
     if stories_section:
-        for idx, story in enumerate(stories_section.find_all('tr'), start=2):
-            headline = story.find('h3').text.strip() if story.find('h3') else ''
-            link = story.find('a')['href'] if story.find('a') else ''
-            image = story.find('img')['src'] if story.find('img') else ''
+        stories = stories_section.find_next_siblings('tr')
+        for idx, story in enumerate(stories[:5], start=2):  # Limit to 5 top stories
+            title = story.find(['h3', 'h4'])
+            link = story.find('a', href=True)
+            image = story.find('img', src=True)
             
-            top_stories.append({
-                'text': headline,
-                'link': link,
-                'image': image,
-                'description': '',
-                'scoring': idx,
-                'enrichment_text': generate_enrichment_text(link),
-                'main_category': "Newsletter",
-                'sub_category': determine_sub_category(headline),
-                'social_trend': generate_social_trend(headline)
-            })
+            if title and link:
+                top_stories.append({
+                    'text': title.text.strip(),
+                    'link': link['href'],
+                    'image': image['src'] if image else '',
+                    'description': '',
+                    'scoring': idx,
+                    'enrichment_text': generate_enrichment_text(link['href']),
+                    'main_category': "Newsletter",
+                    'sub_category': determine_sub_category(title.text),
+                    'social_trend': generate_social_trend(title.text)
+                })
     return top_stories
 
 def extract_more_news(soup):
     more_news = []
-    news_section = soup.find('div', text="More News & Highlights")
+    news_section = soup.find('tr', text=lambda t: t and "More News & Highlights" in t)
     if news_section:
-        for idx, item in enumerate(news_section.find_next('table').find_all('tr'), start=6):
-            text = item.text.strip()
-            link = item.find('a')['href'] if item.find('a') else ''
-            
-            more_news.append({
-                'text': text,
-                'link': link,
-                'image': '',
-                'description': '',
-                'scoring': idx,
-                'enrichment_text': generate_enrichment_text(link),
-                'main_category': "Newsletter",
-                'sub_category': determine_sub_category(text),
-                'social_trend': generate_social_trend(text)
-            })
+        news_items = news_section.find_next_siblings('tr')
+        for idx, item in enumerate(news_items, start=7):
+            link = item.find('a', href=True)
+            if link:
+                more_news.append({
+                    'text': link.text.strip(),
+                    'link': link['href'],
+                    'image': '',
+                    'description': '',
+                    'scoring': idx,
+                    'enrichment_text': generate_enrichment_text(link['href']),
+                    'main_category': "Newsletter",
+                    'sub_category': determine_sub_category(link.text),
+                    'social_trend': generate_social_trend(link.text)
+                })
     return more_news
 
 def extract_one_more_thing(soup):
-    one_more = soup.find('div', text="One More Thing")
+    one_more = soup.find('tr', text=lambda t: t and "One More Thing" in t)
     if one_more:
-        text = one_more.find_next('p').text.strip() if one_more.find_next('p') else ''
-        image = one_more.find_next('img')['src'] if one_more.find_next('img') else ''
-        link = one_more.find_next('a')['href'] if one_more.find_next('a') else ''
+        title = one_more.find_next('h3')
+        link = one_more.find_next('a', href=True)
+        image = one_more.find_next('img', src=True)
+        description = one_more.find_next('p')
         
-        return {
-            'text': "One More Thing: " + text,
-            'link': link,
-            'image': image,
-            'description': '',
-            'scoring': len(extract_more_news(soup)) + 6,
-            'enrichment_text': generate_enrichment_text(link),
-            'main_category': "Newsletter",
-            'sub_category': "One More Thing",
-            'social_trend': generate_social_trend(text)
-        }
+        if title and link:
+            return {
+                'text': title.text.strip(),
+                'link': link['href'],
+                'image': image['src'] if image else '',
+                'description': description.text.strip() if description else '',
+                'scoring': len(extract_more_news(soup)) + 7,
+                'enrichment_text': generate_enrichment_text(link['href']),
+                'main_category': "Newsletter",
+                'sub_category': "One More Thing",
+                'social_trend': generate_social_trend(title.text)
+            }
     return None
 
 def generate_enrichment_text(link):
@@ -212,10 +153,8 @@ def generate_enrichment_text(link):
         article_body = get_adweek_article(link)
         if article_body != "Article content not available.":
             return article_body[:500]  # Limit to 500 characters
-        else:
-            logger.warning(f"No article body found for link: {link}")
     except Exception as e:
-        logger.error(f"Error generating enrichment text: {str(e)}", exc_info=True)
+        logger.error(f"Error generating enrichment text: {str(e)}")
     return ""
 
 def get_adweek_article(url):
@@ -262,13 +201,13 @@ def get_adweek_article(url):
             return "Article content not available."
 
     except requests.RequestException as e:
-        logger.error(f"Error fetching article from {url}: {str(e)}", exc_info=True)
+        logger.error(f"Error fetching article from {url}: {str(e)}")
         return f"Error fetching article: {str(e)}"
     except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON from {url}: {str(e)}", exc_info=True)
+        logger.error(f"Error parsing JSON from {url}: {str(e)}")
         return "Error parsing article content."
     except Exception as e:
-        logger.error(f"Unexpected error processing article from {url}: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error processing article from {url}: {str(e)}")
         return "Unexpected error processing article."
 
 def determine_sub_category(text):
