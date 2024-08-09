@@ -22,6 +22,7 @@ def process_email(data):
             "content_blocks": content_blocks
         }
         
+        logger.debug(f"Extracted content blocks: {content_blocks}")
         return output_json, 200
 
     except Exception as e:
@@ -31,7 +32,6 @@ def process_email(data):
 def extract_content_blocks(soup):
     content_blocks = []
     
-    # Extract all content before the sponsored section
     main_content = extract_main_content(soup)
     if main_content:
         content_blocks.append(main_content)
@@ -42,14 +42,21 @@ def extract_main_content(soup):
     main_content_div = soup.find('div', class_='message-content')
     if main_content_div:
         content = []
-        for elem in main_content_div.children:
-            if elem.name == 'div' and 'padding-bottom:10px' in elem.get('style', ''):
-                break  # Stop when we reach the sponsored content
-            if elem.name in ['p', 'ul']:
-                content.append(elem.get_text(strip=True, separator='\n'))
+        for elem in main_content_div.find_all(['p', 'ul', 'ol']):
+            if elem.name == 'p':
+                content.append(elem.get_text(strip=True))
+            elif elem.name in ['ul', 'ol']:
+                for li in elem.find_all('li'):
+                    content.append(f"- {li.get_text(strip=True)}")
+            
+            # Stop if we reach the sponsored content
+            if '***' in elem.get_text():
+                break
         
         text = '\n\n'.join(content)
         translated_text = translate_text(text)
+        
+        logger.debug(f"Extracted main content: {text[:200]}...")  # Log first 200 characters
         
         return {
             "text": text,
