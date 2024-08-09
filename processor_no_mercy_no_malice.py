@@ -3,9 +3,37 @@ from bs4 import BeautifulSoup
 import re
 import logging
 from translator import translate_text
+import spacy
+from textblob import TextBlob
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lsa import LsaSummarizer as Summarizer
+from sumy.nlp.stemmers import Stemmer
+from sumy.utils import get_stop_words
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Load spaCy model
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    logger.error("SpaCy model not found. Please download it using: python -m spacy download en_core_web_sm")
+    nlp = None
+
+# Simple category classifier
+category_classifier = Pipeline([
+    ('tfidf', TfidfVectorizer()),
+    ('clf', MultinomialNB()),
+])
+
+# Train the classifier with some sample data (you should use more data in practice)
+sample_texts = ["The economy is growing", "New sports results", "Tech company launches product"]
+sample_categories = ["Economics", "Sports", "Technology"]
+category_classifier.fit(sample_texts, sample_categories)
 
 def process_email(data):
     logger.debug("Starting process_email function")
@@ -35,7 +63,6 @@ def extract_content_blocks(soup):
     logger.debug("Starting extract_content_blocks function")
     content_blocks = []
 
-    # Extract main content
     main_content = extract_main_content(soup)
     if main_content:
         logger.debug(f"Main content extracted (length: {len(main_content)})")
@@ -46,15 +73,21 @@ def extract_content_blocks(soup):
             logger.error(f"Error translating main content: {str(e)}")
             translated_content = main_content  # Use original content if translation fails
 
+        enriched_data = enrich_content(main_content)
+        
         content_blocks.append({
             "enrichment_text": main_content,
             "image": "",
             "link": "",
-            "scoring": 1,
-            "main_category": "Newsletter",
-            "sub_category": "Main Content",
-            "social_trend": generate_social_trend(main_content),
-            "translated_text": add_headlines(translated_content)
+            "scoring": enriched_data['score'],
+            "main_category": enriched_data['main_category'],
+            "sub_category": enriched_data['sub_category'],
+            "social_trend": "",
+            "translated_text": add_headlines(translated_content),
+            "tags": enriched_data['tags'],
+            "main_point": enriched_data['main_point'],
+            "sentiment": enriched_data['sentiment'],
+            "related_topics": enriched_data['related_topics']
         })
 
     logger.debug(f"Extracted {len(content_blocks)} content blocks")
@@ -62,17 +95,14 @@ def extract_content_blocks(soup):
 
 def extract_main_content(soup):
     logger.debug("Starting extract_main_content function")
-    # Find the main content container
     content_container = soup.find('tr', id='content-blocks')
     if not content_container:
         logger.warning("Main content container not found")
         return ""
 
-    # Extract all text from paragraphs within the content container
     paragraphs = content_container.find_all('p')
     main_content = "\n\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
 
-    # Remove P.S. and P.P.S. sections
     main_content = re.sub(r'\nP\.S\..+', '', main_content, flags=re.DOTALL)
     main_content = re.sub(r'\nP\.P\.S\..+', '', main_content, flags=re.DOTALL)
 
@@ -89,9 +119,58 @@ def add_headlines(text):
             result.append(line)
     return '\n'.join(result)
 
-def generate_social_trend(text):
-    # This is a simple example. You might want to implement a more sophisticated method.
-    words = text.split()[:2]  # Use first two words of the content
-    return f"#{words[0]}{words[1]}" if len(words) > 1 else "#NoMercyNoMalice"
+def enrich_content(text):
+    if nlp is None:
+        logger.error("SpaCy model not loaded. Cannot perform content enrichment.")
+        return {
+            'tags': [],
+            'main_point': "",
+            'sentiment': 0,
+            'main_category': "Unknown",
+            'sub_category': "General",
+            'score': 0,
+            'related_topics': []
+        }
+
+    doc = nlp(text)
+    
+    # Extract tags (entities)
+    tags = [ent.text for ent in doc.ents]
+    
+    # Generate main point (summary)
+    try:
+        parser = PlaintextParser.from_string(text, Tokenizer("english"))
+        stemmer = Stemmer("english")
+        summarizer = Summarizer(stemmer)
+        summarizer.stop_words = get_stop_words("english")
+        summary = summarizer(parser.document, 3)  # Summarize to 3 sentences
+        main_point = " ".join([str(sentence) for sentence in summary])
+    except Exception as e:
+        logger.error(f"Error generating summary: {str(e)}")
+        main_point = text[:200] + "..."  # Fallback to first 200 characters
+    
+    # Sentiment analysis
+    blob = TextBlob(text)
+    sentiment = blob.sentiment.polarity
+    
+    # Categorization
+    main_category = category_classifier.predict([text])[0]
+    sub_category = "General"  # You might want to implement a more sophisticated sub-category classifier
+    
+    # Scoring (example based on length and unique words)
+    score = len(text) / 1000 + len(set(word.lower_ for word in doc)) / 100
+    
+    # Related topics (based on noun chunks)
+    related_topics = [chunk.text for chunk in doc.noun_chunks][:5]
+    
+    return {
+        'tags': tags,
+        'main_point': main_point,
+        'sentiment': sentiment,
+        'main_category': main_category,
+        'sub_category': sub_category,
+        'score': score,
+        'related_topics': related_topics
+    }
 
 # No Flask app or route decorators in this file
