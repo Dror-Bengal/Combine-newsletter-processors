@@ -36,10 +36,6 @@ def extract_content_blocks(soup):
     if main_content:
         content_blocks.append(main_content)
     
-    second_content = extract_second_content(soup)
-    if second_content:
-        content_blocks.append(second_content)
-    
     return content_blocks
 
 def extract_main_content(soup):
@@ -48,15 +44,13 @@ def extract_main_content(soup):
         content = []
         for elem in main_content_div.find_all(['p', 'ul', 'ol']):
             if elem.name == 'p':
-                if "I've been giving paid" in elem.get_text():
-                    break  # Stop when we reach the second content block
                 content.append(elem.get_text(strip=True))
             elif elem.name in ['ul', 'ol']:
                 for li in elem.find_all('li'):
                     content.append(f"- {li.get_text(strip=True)}")
             
-            # Stop if we reach the sponsored content
-            if '***' in elem.get_text():
+            # Stop if we reach the footer
+            if 'PS -' in elem.get_text():
                 break
         
         text = '\n\n'.join(content)
@@ -75,41 +69,6 @@ def extract_main_content(soup):
             "sub_category": "Main Content",
             "social_trend": ""
         }
-    return None
-
-def extract_second_content(soup):
-    main_content_div = soup.find('div', class_='message-content')
-    if main_content_div:
-        content = []
-        found_start = False
-        for elem in main_content_div.find_all(['p', 'ul', 'ol']):
-            if "I've been giving paid" in elem.get_text():
-                found_start = True
-            
-            if found_start:
-                if elem.name == 'p':
-                    content.append(elem.get_text(strip=True))
-                elif elem.name in ['ul', 'ol']:
-                    for li in elem.find_all('li'):
-                        content.append(f"- {li.get_text(strip=True)}")
-        
-        if content:
-            text = '\n\n'.join(content)
-            translated_text = translate_text(text)
-            
-            logger.debug(f"Extracted second content: {text[:200]}...")  # Log first 200 characters
-            
-            return {
-                "text": text,
-                "translated_text": translated_text,
-                "link": "",
-                "image": "",
-                "scoring": 2,
-                "enrichment_text": "",
-                "main_category": "Newsletter",
-                "sub_category": "Additional Content",
-                "social_trend": ""
-            }
     return None
 
 # No Flask app or route decorators in this file
