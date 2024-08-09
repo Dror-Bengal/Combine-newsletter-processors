@@ -9,7 +9,7 @@ from sklearn.pipeline import Pipeline
 from translator import translate_text
 import re
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Load spaCy model
@@ -41,9 +41,15 @@ def process_email(data):
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
+        logger.debug(f"Received metadata: {metadata}")
+        logger.debug(f"HTML content length: {len(content_html)}")
+        
         soup = BeautifulSoup(content_html, 'html.parser')
 
         content_blocks = extract_content_blocks(soup)
+        
+        if not content_blocks:
+            logger.warning("No content blocks extracted")
         
         output_json = {
             "metadata": metadata,
@@ -61,28 +67,54 @@ def extract_content_blocks(soup):
     logger.debug("Starting extract_content_blocks function")
     content_blocks = []
 
-    # Adjust these selectors based on the actual structure of the Scout Galway newsletter
-    main_content = soup.find('div', class_='main-content')
+    # Log the entire HTML structure for debugging
+    logger.debug(f"Full HTML content:\n{soup.prettify()}")
+
+    # Try different possible selectors for the main content
+    possible_selectors = [
+        'div.main-content',
+        'div.content',
+        'div#main',
+        'div.newsletter-content',
+        'body'  # Fallback to the entire body if no specific container is found
+    ]
+
+    main_content = None
+    for selector in possible_selectors:
+        main_content = soup.select_one(selector)
+        if main_content:
+            logger.debug(f"Found main content using selector: {selector}")
+            break
+
     if not main_content:
         logger.warning("Main content container not found")
         return content_blocks
 
-    articles = main_content.find_all('article')
+    # Try to find articles or content sections
+    articles = main_content.find_all(['article', 'div', 'section'])
+    logger.debug(f"Found {len(articles)} potential content sections")
+
     for idx, article in enumerate(articles, start=1):
-        title = article.find('h2')
+        logger.debug(f"Processing content section {idx}")
+        logger.debug(f"Content section HTML:\n{article.prettify()}")
+
+        # Try different selectors for title, link, image, and description
+        title = article.find(['h1', 'h2', 'h3', 'strong'])
         link = article.find('a', href=True)
         image = article.find('img', src=True)
-        description = article.find('p', class_='description')
+        description = article.find(['p', 'div'], class_=['description', 'content', 'text'])
 
-        if title and link:
+        if title and (link or description):
             content = {
                 "text": title.text.strip(),
-                "link": link['href'],
+                "link": link['href'] if link else "",
                 "image": image['src'] if image else "",
                 "description": description.text.strip() if description else "",
-                "scoring": idx  # Simple scoring based on order
+                "scoring": idx
             }
             
+            logger.debug(f"Extracted content: {content}")
+
             enriched_data = enrich_content(content['text'] + " " + content['description'])
             content.update(enriched_data)
             
@@ -91,6 +123,8 @@ def extract_content_blocks(soup):
             content['translated_description'] = translate_text(content['description'])
             
             content_blocks.append(content)
+        else:
+            logger.warning(f"Skipped content section {idx} due to missing title or content")
 
     logger.debug(f"Extracted {len(content_blocks)} content blocks")
     return content_blocks
@@ -139,8 +173,6 @@ def enrich_content(text):
         logger.exception(f"Unexpected error in content enrichment: {str(e)}")
 
     return result
-
-# You might need additional helper functions depending on the complexity of the Scout Galway newsletter
 
 if __name__ == "__main__":
     # You can add some test code here to run the processor independently
