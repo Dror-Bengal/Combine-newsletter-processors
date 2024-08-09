@@ -14,12 +14,13 @@ from sumy.summarizers.lsa import LsaSummarizer as Summarizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Load spaCy model
 try:
     nlp = spacy.load("en_core_web_sm")
+    logger.info("SpaCy model loaded successfully")
 except OSError:
     logger.error("SpaCy model not found. Please download it using: python -m spacy download en_core_web_sm")
     nlp = None
@@ -82,7 +83,7 @@ def extract_content_blocks(soup):
             "scoring": enriched_data['score'],
             "main_category": enriched_data['main_category'],
             "sub_category": enriched_data['sub_category'],
-            "social_trend": "",
+            "social_trend": enriched_data['social_trend'],
             "translated_text": add_headlines(translated_content),
             "tags": enriched_data['tags'],
             "main_point": enriched_data['main_point'],
@@ -120,57 +121,69 @@ def add_headlines(text):
     return '\n'.join(result)
 
 def enrich_content(text):
-    if nlp is None:
-        logger.error("SpaCy model not loaded. Cannot perform content enrichment.")
-        return {
-            'tags': [],
-            'main_point': "",
-            'sentiment': 0,
-            'main_category': "Unknown",
-            'sub_category': "General",
-            'score': 0,
-            'related_topics': []
-        }
-
-    doc = nlp(text)
+    logger.debug("Starting content enrichment")
     
-    # Extract tags (entities)
-    tags = [ent.text for ent in doc.ents]
-    
-    # Generate main point (summary)
-    try:
-        parser = PlaintextParser.from_string(text, Tokenizer("english"))
-        stemmer = Stemmer("english")
-        summarizer = Summarizer(stemmer)
-        summarizer.stop_words = get_stop_words("english")
-        summary = summarizer(parser.document, 3)  # Summarize to 3 sentences
-        main_point = " ".join([str(sentence) for sentence in summary])
-    except Exception as e:
-        logger.error(f"Error generating summary: {str(e)}")
-        main_point = text[:200] + "..."  # Fallback to first 200 characters
-    
-    # Sentiment analysis
-    blob = TextBlob(text)
-    sentiment = blob.sentiment.polarity
-    
-    # Categorization
-    main_category = category_classifier.predict([text])[0]
-    sub_category = "General"  # You might want to implement a more sophisticated sub-category classifier
-    
-    # Scoring (example based on length and unique words)
-    score = len(text) / 1000 + len(set(word.lower_ for word in doc)) / 100
-    
-    # Related topics (based on noun chunks)
-    related_topics = [chunk.text for chunk in doc.noun_chunks][:5]
-    
-    return {
-        'tags': tags,
-        'main_point': main_point,
-        'sentiment': sentiment,
-        'main_category': main_category,
-        'sub_category': sub_category,
-        'score': score,
-        'related_topics': related_topics
+    result = {
+        'tags': [],
+        'main_point': "",
+        'sentiment': 0,
+        'main_category': "Unknown",
+        'sub_category': "General",
+        'score': 0,
+        'related_topics': [],
+        'social_trend': ""
     }
+
+    try:
+        if nlp is None:
+            logger.error("SpaCy model not loaded. Cannot perform content enrichment.")
+            return result
+
+        doc = nlp(text)
+        logger.debug(f"SpaCy processing completed. Document length: {len(doc)}")
+
+        # Extract tags (entities)
+        result['tags'] = [ent.text for ent in doc.ents]
+        logger.debug(f"Extracted {len(result['tags'])} tags")
+
+        # Generate main point (summary)
+        try:
+            parser = PlaintextParser.from_string(text, Tokenizer("english"))
+            stemmer = Stemmer("english")
+            summarizer = Summarizer(stemmer)
+            summarizer.stop_words = get_stop_words("english")
+            summary = summarizer(parser.document, 3)  # Summarize to 3 sentences
+            result['main_point'] = " ".join([str(sentence) for sentence in summary])
+            logger.debug(f"Generated summary of length: {len(result['main_point'])}")
+        except Exception as e:
+            logger.error(f"Error generating summary: {str(e)}")
+            result['main_point'] = text[:200] + "..."  # Fallback to first 200 characters
+
+        # Sentiment analysis
+        blob = TextBlob(text)
+        result['sentiment'] = blob.sentiment.polarity
+        logger.debug(f"Calculated sentiment: {result['sentiment']}")
+
+        # Categorization
+        result['main_category'] = category_classifier.predict([text])[0]
+        logger.debug(f"Predicted category: {result['main_category']}")
+
+        # Scoring
+        result['score'] = len(text) / 1000 + len(set(word.lower_ for word in doc)) / 100
+        logger.debug(f"Calculated score: {result['score']}")
+
+        # Related topics (based on noun chunks)
+        result['related_topics'] = [chunk.text for chunk in doc.noun_chunks][:5]
+        logger.debug(f"Extracted {len(result['related_topics'])} related topics")
+
+        # Social trend (simple example)
+        words = text.split()[:2]
+        result['social_trend'] = f"#{words[0]}{words[1]}" if len(words) > 1 else "#Trending"
+        logger.debug(f"Generated social trend: {result['social_trend']}")
+
+    except Exception as e:
+        logger.exception(f"Unexpected error in content enrichment: {str(e)}")
+
+    return result
 
 # No Flask app or route decorators in this file
