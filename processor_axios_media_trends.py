@@ -35,43 +35,42 @@ def process_axios_media_trends(data):
 
 def extract_content_blocks(soup):
     content_blocks = []
-    main_stories = soup.find_all('tr', class_='post-text')
     
-    for idx, story in enumerate(main_stories, start=1):
-        block = process_story(story, idx)
-        if block:
-            content_blocks.append(block)
+    # Find all story sections
+    story_sections = soup.find_all('tr', class_='post-text')
     
-    logger.debug(f"Extracted {len(content_blocks)} content blocks")
+    for idx, section in enumerate(story_sections, start=1):
+        headline = section.find_previous('span', class_='bodytext hed')
+        headline_text = headline.text.strip() if headline else ""
+        
+        # Find the image for this section
+        image = section.find_previous('img')
+        image_url = image['src'] if image else ""
+        
+        # Extract content
+        content = section.get_text(strip=True)
+        
+        # Find links
+        links = section.find_all('a', href=True)
+        link = links[0]['href'] if links else ""
+        
+        block = {
+            "text": headline_text,
+            "translated_text": translate_text(headline_text),
+            "description": content,
+            "translated_description": translate_text(content),
+            "image": image_url,
+            "link": link,
+            "scoring": idx,
+            "main_category": "Newsletter",
+            "sub_category": determine_sub_category(headline_text),
+            "social_trend": generate_social_trend(headline_text)
+        }
+        
+        content_blocks.append(block)
+        logger.debug(f"Processed story: {headline_text}")
+    
     return content_blocks
-
-def process_story(story, score):
-    headline = story.find_previous('span', class_='bodytext hed')
-    headline_text = headline.text.strip() if headline else ""
-    
-    image = story.find_previous('img')
-    image_url = image['src'] if image else ""
-    
-    content = story.get_text(strip=True)
-    
-    link = story.find('a', href=True)
-    link_url = link['href'] if link else ""
-    
-    block = {
-        "text": headline_text,
-        "translated_text": translate_text(headline_text),
-        "description": content,
-        "translated_description": translate_text(content),
-        "image": image_url,
-        "link": link_url,
-        "scoring": score,
-        "main_category": "Newsletter",
-        "sub_category": determine_sub_category(headline_text),
-        "social_trend": generate_social_trend(headline_text)
-    }
-    
-    logger.debug(f"Processed story: {headline_text}")
-    return block
 
 def determine_sub_category(text):
     categories = {
@@ -94,6 +93,7 @@ def generate_social_trend(text):
     words = text.split()[:2]
     return f"#{words[0]}{words[1]}" if len(words) > 1 else "#AxiosMediaTrends"
 
+# This function is not used in the current implementation but could be useful for future enhancements
 def extract_date(soup):
     date_string = soup.find('span', string=re.compile(r'\w+, \w+ \d{2}, \d{4}'))
     if date_string:
