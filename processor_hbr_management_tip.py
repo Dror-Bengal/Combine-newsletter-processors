@@ -44,24 +44,25 @@ def meets_criteria(data):
 
 def extract_content(soup):
     try:
-        # Find the main content box (assuming it's the first table after "Today's Tip")
-        main_content = soup.find('td', string='Today\'s Tip').find_next('table')
+        # Find the main content container
+        main_content = soup.find('table', class_='row-content stack')
         
         if not main_content:
-            logger.warning("Main content not found")
+            logger.warning("Main content container not found")
             return None
 
         # Extract title
         title = main_content.find('h1')
         title_text = title.get_text(strip=True) if title else ""
 
-        # Extract the tip content (all p tags within the main content)
-        tip_paragraphs = main_content.find_all('p')
-        tip_text = "\n\n".join([p.get_text(strip=True) for p in tip_paragraphs if p.get_text(strip=True)])
+        # Extract the tip content
+        content_div = main_content.find('div', style=lambda s: s and 'font-family:Georgia,Times,\'Times New Roman\',serif' in s)
+        tip_paragraphs = content_div.find_all('p') if content_div else []
+        tip_text = "\n\n".join([p.get_text(strip=True) for p in tip_paragraphs])
 
-        # Extract the source (last p tag)
-        source = tip_paragraphs[-1] if tip_paragraphs else None
-        source_text = source.get_text(strip=True) if source else ""
+        # Extract the source
+        source_div = main_content.find('div', style=lambda s: s and 'font-family:Helvetica Neue,Helvetica,Arial,sans-serif' in s)
+        source_text = source_div.get_text(strip=True) if source_div else ""
 
         # Translate content
         translated_title = translate_text(title_text)
@@ -72,7 +73,7 @@ def extract_content(soup):
             "description": tip_text,
             "translated_text": translated_title,
             "translated_description": translated_tip,
-            "link": "",  # No specific link found in the example
+            "link": "",  # No specific link found in the content
             "image": "",  # No image found in the content
             "scoring": 1,
             "enrichment_text": source_text,
