@@ -36,22 +36,25 @@ def extract_content_blocks(soup):
     if main_content:
         content_blocks.append(main_content)
     
-    # Extract sponsor content
-    sponsor_content = extract_sponsor_content(soup)
-    if sponsor_content:
-        content_blocks.append(sponsor_content)
-    
-    # Extract postscripts
-    postscripts = extract_postscripts(soup)
-    content_blocks.extend(postscripts)
+    # Extract bullet points
+    bullet_points = extract_bullet_points(soup)
+    if bullet_points:
+        content_blocks.append(bullet_points)
     
     return content_blocks
 
 def extract_main_content(soup):
     main_content = soup.find('div', class_='message-content')
     if main_content:
-        paragraphs = main_content.find_all('p', recursive=False)
-        text = '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+        # Find all paragraphs before the first image
+        paragraphs = []
+        for elem in main_content.find_all(['p', 'img'], recursive=False):
+            if elem.name == 'img':
+                break
+            if elem.name == 'p':
+                paragraphs.append(elem.get_text(strip=True))
+        
+        text = '\n\n'.join(paragraphs)
         translated_text = translate_text(text)
         
         return {
@@ -67,47 +70,24 @@ def extract_main_content(soup):
         }
     return None
 
-def extract_sponsor_content(soup):
-    sponsor_section = soup.find('div', style=lambda value: value and 'padding-bottom:10px' in value)
-    if sponsor_section:
-        text = sponsor_section.get_text(strip=True)
+def extract_bullet_points(soup):
+    bullet_list = soup.find('ul', class_='unordered_list')
+    if bullet_list:
+        bullet_points = bullet_list.find_all('li', class_='list_item')
+        text = '\n'.join([point.get_text(strip=True) for point in bullet_points])
         translated_text = translate_text(text)
-        image = sponsor_section.find('img')
-        image_url = image['src'] if image else ""
         
         return {
             "text": text,
             "translated_text": translated_text,
             "link": "",
-            "image": image_url,
+            "image": "",
             "scoring": 2,
             "enrichment_text": "",
             "main_category": "Newsletter",
-            "sub_category": "Sponsor Content",
+            "sub_category": "Key Points",
             "social_trend": ""
         }
     return None
-
-def extract_postscripts(soup):
-    postscripts = []
-    ps_sections = soup.find_all('div', style=lambda value: value and 'padding-bottom:10px' in value)
-    
-    for i, ps in enumerate(ps_sections[1:], start=3):  # Skip the first one as it's likely the sponsor content
-        text = ps.get_text(strip=True)
-        translated_text = translate_text(text)
-        
-        postscripts.append({
-            "text": text,
-            "translated_text": translated_text,
-            "link": "",
-            "image": "",
-            "scoring": i,
-            "enrichment_text": "",
-            "main_category": "Newsletter",
-            "sub_category": f"Postscript {i-2}",
-            "social_trend": ""
-        })
-    
-    return postscripts
 
 # No Flask app or route decorators in this file
