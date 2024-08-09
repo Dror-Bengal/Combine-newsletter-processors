@@ -8,6 +8,7 @@ from processor_adweek_daily import process_email as process_adweek_daily
 from processor_no_mercy_no_malice import process_email as process_no_mercy_no_malice
 from processor_seth_godin import process_email as process_seth_godin
 from processor_simon_sinek import process_email as process_simon_sinek
+from processor_hbr_management_tip import process_email as process_hbr_management_tip
 from translator import translate_content_block, translate_content_block_async
 import logging
 import json
@@ -49,7 +50,9 @@ def process_email():
         return jsonify({"error": "Missing 'sender' field in metadata"}), 400
     
     sender = data['metadata']['sender']
-    logger.debug(f"Sender: {sender}")
+    subject = data['metadata'].get('subject', '')
+    sender_name = data['metadata'].get('Sender name', '')
+    logger.debug(f"Sender: {sender}, Subject: {subject}, Sender name: {sender_name}")
     
     try:
         result = None
@@ -90,6 +93,9 @@ def process_email():
         elif "inspireme@simonsinek.com" in sender:
             logger.debug("Processing as Simon Sinek's Notes to Inspire")
             result, status_code = process_simon_sinek(data)
+        elif sender == "emailteam@emails.hbr.org" and subject == "The Management Tip of the Day" and sender_name == "Harvard Business Review":
+            logger.debug("Processing as Harvard Business Review Management Tip")
+            result, status_code = process_hbr_management_tip(data)
         else:
             logger.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
