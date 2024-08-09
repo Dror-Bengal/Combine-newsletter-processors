@@ -38,27 +38,30 @@ def extract_content_block(soup):
     main_image = soup.find('img', class_='c24')
     image_url = main_image['src'] if main_image else ""
 
-    # Extract main content
-    main_content = extract_main_content(soup)
+    # Extract headline and main content
+    headline, main_content = extract_main_content(soup)
 
-    # Translate main content
+    # Translate headline and main content
     try:
+        translated_headline = translate_text(headline)
         translated_content = translate_text(main_content)
     except Exception as e:
         logger.error(f"Translation failed: {str(e)}")
-        translated_content = main_content  # Fallback to original content
+        translated_headline = headline
+        translated_content = main_content
 
     content_block = {
         "text": main_content,
+        "headline": headline,
+        "translated_headline": translated_headline,
+        "translated_text": translated_content,
         "image": image_url,
         "link": "",
         "scoring": 1,
-        "enrichment_text": generate_enrichment_text(main_content),
-        "main_category": "Newsletter",
-        "sub_category": "Seth Godin's Blog",
-        "social_trend": generate_social_trend(main_content),
-        "translated_text": translated_content,
-        "translated_description": ""  # No separate description for this content
+        "enrichment_text": "",
+        "main_category": "Seth Godin's Blog",
+        "sub_category": "Newsletter",
+        "social_trend": ""
     }
 
     return content_block
@@ -68,26 +71,16 @@ def extract_main_content(soup):
     content_container = soup.find('div', class_='rssDesc')
     if not content_container:
         logger.warning("Content container not found")
-        return ""
+        return "", ""
 
-    # Extract title
-    title = content_container.find('h2')
-    title_text = title.get_text(strip=True) if title else ""
+    # Extract headline
+    headline = content_container.find('h2')
+    headline_text = headline.get_text(strip=True) if headline else ""
 
     # Extract paragraphs
     paragraphs = content_container.find_all('p')
     content_text = "\n\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
 
-    main_content = f"{title_text}\n\n{content_text}"
-    return main_content
-
-def generate_enrichment_text(content):
-    # This is a placeholder. Implement actual enrichment logic here.
-    return content[:100] + "..."  # Return first 100 characters as a simple summary
-
-def generate_social_trend(content):
-    # This is a placeholder. Implement actual trend generation logic here.
-    words = content.split()[:2]
-    return f"#{words[0]}{words[1]}" if len(words) > 1 else "#SethGodin"
+    return headline_text, content_text
 
 # No Flask app or route decorators in this file
