@@ -42,15 +42,26 @@ def extract_main_content(soup):
     main_content_div = soup.find('div', class_='message-content')
     if main_content_div:
         content = []
-        for elem in main_content_div.find_all(['p', 'ul', 'ol']):
-            if elem.name == 'p':
-                content.append(elem.get_text(strip=True))
-            elif elem.name in ['ul', 'ol']:
-                for li in elem.find_all('li'):
-                    content.append(f"- {li.get_text(strip=True)}")
+        in_ad_section = False
+        ad_counter = 0
+        
+        for elem in main_content_div.find_all(['p', 'ul', 'ol', 'h2']):
+            text = elem.get_text(strip=True)
+            
+            if "***" in text:
+                ad_counter += 1
+                in_ad_section = ad_counter % 2 != 0  # Toggle ad section on odd counts
+                continue
+            
+            if not in_ad_section:
+                if elem.name == 'p':
+                    content.append(text)
+                elif elem.name in ['ul', 'ol']:
+                    for li in elem.find_all('li'):
+                        content.append(f"- {li.get_text(strip=True)}")
             
             # Stop if we reach the footer
-            if 'PS -' in elem.get_text():
+            if text.startswith('PS -'):
                 break
         
         text = '\n\n'.join(content)
