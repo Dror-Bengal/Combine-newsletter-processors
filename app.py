@@ -9,6 +9,7 @@ from processor_no_mercy_no_malice import process_email as process_no_mercy_no_ma
 from processor_seth_godin import process_email as process_seth_godin
 from processor_simon_sinek import process_email as process_simon_sinek
 from processor_hbr_management_tip import process_email as process_hbr_management_tip
+from processor_dorie_clark import process_email as process_dorie_clark
 from translator import translate_content_block, translate_content_block_async
 import logging
 import json
@@ -96,6 +97,9 @@ def process_email():
         elif sender == "emailteam@emails.hbr.org" and subject == "The Management Tip of the Day" and sender_name == "Harvard Business Review":
             logger.debug("Processing as Harvard Business Review Management Tip")
             result, status_code = process_hbr_management_tip(data)
+        elif "dorie@dorieclark.com" in sender:
+            logger.debug("Processing as Dorie Clark newsletter")
+            result, status_code = process_dorie_clark(data)
         else:
             logger.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
