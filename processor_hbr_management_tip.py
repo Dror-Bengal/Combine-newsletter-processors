@@ -7,7 +7,6 @@ logger = logging.getLogger(__name__)
 
 def process_email(data):
     try:
-        # Check if all required criteria are met
         if not meets_criteria(data):
             logger.info("Email does not meet the criteria for HBR Management Tip of the Day")
             return None, 400
@@ -45,8 +44,9 @@ def meets_criteria(data):
 
 def extract_content(soup):
     try:
-        # Extract the main content
-        main_content = soup.find('div', class_='rssDesc')
+        # Find the main content box (assuming it's the first table after "Today's Tip")
+        main_content = soup.find('td', string='Today\'s Tip').find_next('table')
+        
         if not main_content:
             logger.warning("Main content not found")
             return None
@@ -55,12 +55,12 @@ def extract_content(soup):
         title = main_content.find('h1')
         title_text = title.get_text(strip=True) if title else ""
 
-        # Extract the tip content
-        tip_content = main_content.find('div', style=lambda value: value and 'font-family:Georgia,Times,\'Times New Roman\',serif' in value)
-        tip_text = tip_content.get_text(strip=True) if tip_content else ""
+        # Extract the tip content (all p tags within the main content)
+        tip_paragraphs = main_content.find_all('p')
+        tip_text = "\n\n".join([p.get_text(strip=True) for p in tip_paragraphs if p.get_text(strip=True)])
 
-        # Extract the source
-        source = main_content.find('p', style=lambda value: value and 'font-family:Helvetica Neue,Helvetica,Arial,sans-serif' in value)
+        # Extract the source (last p tag)
+        source = tip_paragraphs[-1] if tip_paragraphs else None
         source_text = source.get_text(strip=True) if source else ""
 
         # Translate content
@@ -73,7 +73,7 @@ def extract_content(soup):
             "translated_text": translated_title,
             "translated_description": translated_tip,
             "link": "",  # No specific link found in the example
-            "image": "",  # No image found in the example
+            "image": "",  # No image found in the content
             "scoring": 1,
             "enrichment_text": source_text,
             "main_category": "Management Tip",
@@ -88,10 +88,9 @@ def extract_content(soup):
         return None
 
 def determine_sub_category(text):
-    # This is a simple example. You might want to implement more sophisticated categorization
     categories = {
         'Leadership': ['lead', 'manage', 'team'],
-        'Communication': ['communicate', 'present', 'speak'],
+        'Communication': ['communicate', 'present', 'speak', 'pitch'],
         'Productivity': ['productive', 'efficiency', 'time management'],
         'Innovation': ['innovate', 'create', 'new ideas'],
         'Career Development': ['career', 'professional growth', 'skill']
