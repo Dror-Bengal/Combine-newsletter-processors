@@ -65,14 +65,13 @@ def extract_content(soup):
         source_text = source_div.get_text(strip=True) if source_div else ""
 
         # Translate content
-        translated_title = translate_text(title_text)
-        translated_tip = translate_text(tip_text)
+        translated_subject = translate_text(title_text)
+        translated_text = translate_text(tip_text)
 
         content_block = {
-            "text": title_text,
-            "description": tip_text,
-            "translated_text": translated_title,
-            "translated_description": translated_tip,
+            "text": tip_text,
+            "translated_text": translated_text,
+            "translated_subject": translated_subject,
             "link": "",  # No specific link found in the content
             "image": "",  # No image found in the content
             "scoring": 1,
