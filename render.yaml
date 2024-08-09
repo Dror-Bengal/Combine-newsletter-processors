@@ -5,6 +5,7 @@ services:
     buildCommand: |
       pip install -U pip
       pip install -r requirements.txt
+      python -m spacy download en_core_web_sm
     startCommand: gunicorn app:application --timeout 600 --workers 4 --threads 4 --max-requests 500 --max-requests-jitter 50
     envVars:
       - key: CELERY_BROKER_URL
