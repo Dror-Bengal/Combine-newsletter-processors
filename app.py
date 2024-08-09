@@ -7,6 +7,7 @@ from processor_adweek_agency import process_email as process_adweek_agency_daily
 from processor_adweek_daily import process_email as process_adweek_daily
 from processor_no_mercy_no_malice import process_email as process_no_mercy_no_malice
 from processor_seth_godin import process_email as process_seth_godin
+from processor_simon_sinek import process_email as process_simon_sinek
 from translator import translate_content_block, translate_content_block_async
 import logging
 import json
@@ -86,6 +87,9 @@ def process_email():
         elif "notify@sethgodin.com" in sender:
             logger.debug("Processing as Seth Godin's Blog")
             result, status_code = process_seth_godin(data)
+        elif "inspireme@simonsinek.com" in sender:
+            logger.debug("Processing as Simon Sinek's Notes to Inspire")
+            result, status_code = process_simon_sinek(data)
         else:
             logger.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400
