@@ -1,20 +1,15 @@
-import json
-from bs4 import BeautifulSoup
-import re
 import logging
-from translator import translate_text
-import spacy
+from bs4 import BeautifulSoup
+import requests
 from textblob import TextBlob
+import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.summarizers.lsa import LsaSummarizer as Summarizer
-from sumy.nlp.stemmers import Stemmer
-from sumy.utils import get_stop_words
+from translator import translate_text
+import re
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Load spaCy model
@@ -32,24 +27,26 @@ category_classifier = Pipeline([
 ])
 
 # Train the classifier with some sample data (you should use more data in practice)
-sample_texts = ["The economy is growing", "New sports results", "Tech company launches product"]
-sample_categories = ["Economics", "Sports", "Technology"]
+sample_texts = ["Galway wins hurling championship", "New tech startup in Galway", "Cultural festival in Galway"]
+sample_categories = ["Sports", "Technology", "Culture"]
 category_classifier.fit(sample_texts, sample_categories)
 
 def process_email(data):
-    logger.debug("Starting process_email function")
+    logger.debug("Starting process_email function for Scout Galway")
     try:
         if 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
             logger.error("Invalid JSON structure in input data")
             return {"error": "Invalid JSON structure"}, 400
 
         content_html = data['metadata']['content']['html']
+        metadata = data['metadata']
         
         soup = BeautifulSoup(content_html, 'html.parser')
 
         content_blocks = extract_content_blocks(soup)
         
         output_json = {
+            "metadata": metadata,
             "content_blocks": content_blocks
         }
         
@@ -64,61 +61,39 @@ def extract_content_blocks(soup):
     logger.debug("Starting extract_content_blocks function")
     content_blocks = []
 
-    main_content = extract_main_content(soup)
-    if main_content:
-        logger.debug(f"Main content extracted (length: {len(main_content)})")
-        try:
-            translated_content = translate_text(main_content)
-            logger.debug("Main content translated successfully")
-        except Exception as e:
-            logger.error(f"Error translating main content: {str(e)}")
-            translated_content = main_content  # Use original content if translation fails
+    # Adjust these selectors based on the actual structure of the Scout Galway newsletter
+    main_content = soup.find('div', class_='main-content')
+    if not main_content:
+        logger.warning("Main content container not found")
+        return content_blocks
 
-        enriched_data = enrich_content(main_content)
-        
-        content_blocks.append({
-            "enrichment_text": main_content,
-            "image": "",
-            "link": "",
-            "scoring": enriched_data['score'],
-            "main_category": enriched_data['main_category'],
-            "sub_category": enriched_data['sub_category'],
-            "social_trend": enriched_data['social_trend'],
-            "translated_text": add_headlines(translated_content),
-            "tags": enriched_data['tags'],
-            "main_point": enriched_data['main_point'],
-            "sentiment": enriched_data['sentiment'],
-            "related_topics": enriched_data['related_topics']
-        })
+    articles = main_content.find_all('article')
+    for idx, article in enumerate(articles, start=1):
+        title = article.find('h2')
+        link = article.find('a', href=True)
+        image = article.find('img', src=True)
+        description = article.find('p', class_='description')
+
+        if title and link:
+            content = {
+                "text": title.text.strip(),
+                "link": link['href'],
+                "image": image['src'] if image else "",
+                "description": description.text.strip() if description else "",
+                "scoring": idx  # Simple scoring based on order
+            }
+            
+            enriched_data = enrich_content(content['text'] + " " + content['description'])
+            content.update(enriched_data)
+            
+            # Translate content
+            content['translated_text'] = translate_text(content['text'])
+            content['translated_description'] = translate_text(content['description'])
+            
+            content_blocks.append(content)
 
     logger.debug(f"Extracted {len(content_blocks)} content blocks")
     return content_blocks
-
-def extract_main_content(soup):
-    logger.debug("Starting extract_main_content function")
-    content_container = soup.find('tr', id='content-blocks')
-    if not content_container:
-        logger.warning("Main content container not found")
-        return ""
-
-    paragraphs = content_container.find_all('p')
-    main_content = "\n\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
-
-    main_content = re.sub(r'\nP\.S\..+', '', main_content, flags=re.DOTALL)
-    main_content = re.sub(r'\nP\.P\.S\..+', '', main_content, flags=re.DOTALL)
-
-    logger.debug(f"Extracted main content (length: {len(main_content)})")
-    return main_content
-
-def add_headlines(text):
-    lines = text.split('\n')
-    result = []
-    for line in lines:
-        if len(line) <= 50 and not line.endswith('.'):
-            result.append(f"<headline>{line}</headline>")
-        else:
-            result.append(line)
-    return '\n'.join(result)
 
 def enrich_content(text):
     logger.debug("Starting content enrichment")
@@ -127,11 +102,10 @@ def enrich_content(text):
         'tags': [],
         'main_point': "",
         'sentiment': 0,
-        'main_category': "Unknown",
+        'main_category': "Newsletter",
         'sub_category': "General",
-        'score': 0,
-        'related_topics': [],
-        'social_trend': ""
+        'social_trend': "",
+        'related_topics': []
     }
 
     try:
@@ -140,50 +114,34 @@ def enrich_content(text):
             return result
 
         doc = nlp(text)
-        logger.debug(f"SpaCy processing completed. Document length: {len(doc)}")
 
         # Extract tags (entities)
         result['tags'] = [ent.text for ent in doc.ents]
-        logger.debug(f"Extracted {len(result['tags'])} tags")
 
         # Generate main point (summary)
-        try:
-            parser = PlaintextParser.from_string(text, Tokenizer("english"))
-            stemmer = Stemmer("english")
-            summarizer = Summarizer(stemmer)
-            summarizer.stop_words = get_stop_words("english")
-            summary = summarizer(parser.document, 3)  # Summarize to 3 sentences
-            result['main_point'] = " ".join([str(sentence) for sentence in summary])
-            logger.debug(f"Generated summary of length: {len(result['main_point'])}")
-        except Exception as e:
-            logger.error(f"Error generating summary: {str(e)}")
-            result['main_point'] = text[:200] + "..."  # Fallback to first 200 characters
+        result['main_point'] = text[:200] + "..."  # Simple summary, first 200 characters
 
         # Sentiment analysis
         blob = TextBlob(text)
         result['sentiment'] = blob.sentiment.polarity
-        logger.debug(f"Calculated sentiment: {result['sentiment']}")
 
         # Categorization
-        result['main_category'] = category_classifier.predict([text])[0]
-        logger.debug(f"Predicted category: {result['main_category']}")
+        result['sub_category'] = category_classifier.predict([text])[0]
 
-        # Scoring
-        result['score'] = len(text) / 1000 + len(set(word.lower_ for word in doc)) / 100
-        logger.debug(f"Calculated score: {result['score']}")
+        # Social trend (simple example)
+        words = re.findall(r'\w+', text.lower())
+        result['social_trend'] = f"#{words[0]}{words[1].capitalize()}" if len(words) > 1 else "#ScoutGalway"
 
         # Related topics (based on noun chunks)
         result['related_topics'] = [chunk.text for chunk in doc.noun_chunks][:5]
-        logger.debug(f"Extracted {len(result['related_topics'])} related topics")
-
-        # Social trend (simple example)
-        words = text.split()[:2]
-        result['social_trend'] = f"#{words[0]}{words[1]}" if len(words) > 1 else "#Trending"
-        logger.debug(f"Generated social trend: {result['social_trend']}")
 
     except Exception as e:
         logger.exception(f"Unexpected error in content enrichment: {str(e)}")
 
     return result
 
-# No Flask app or route decorators in this file
+# You might need additional helper functions depending on the complexity of the Scout Galway newsletter
+
+if __name__ == "__main__":
+    # You can add some test code here to run the processor independently
+    pass
