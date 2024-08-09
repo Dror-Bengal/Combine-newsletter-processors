@@ -31,7 +31,7 @@ def process_email(data):
 def extract_content_blocks(soup):
     content_blocks = []
     
-    # Extract main content (paragraphs before the sponsored section)
+    # Extract main content
     main_content = extract_main_content(soup)
     if main_content:
         content_blocks.append(main_content)
@@ -47,10 +47,11 @@ def extract_main_content(soup):
     main_content_div = soup.find('div', class_='message-content')
     if main_content_div:
         paragraphs = []
-        for p in main_content_div.find_all('p', recursive=False):
-            if '***' in p.text:  # Stop when we reach the sponsored content
-                break
-            paragraphs.append(p.text.strip())
+        for elem in main_content_div.find_all(['p', 'div'], recursive=False):
+            if elem.name == 'div' and 'padding-bottom:10px' in elem.get('style', ''):
+                break  # Stop when we reach the sponsored content
+            if elem.name == 'p':
+                paragraphs.append(elem.get_text(strip=True))
         
         text = '\n\n'.join(paragraphs)
         translated_text = translate_text(text)
@@ -72,7 +73,7 @@ def extract_bullet_points(soup):
     bullet_list = soup.find('ul', class_='unordered_list')
     if bullet_list:
         bullet_points = bullet_list.find_all('li', class_='list_item')
-        text = '\n'.join([point.text.strip() for point in bullet_points])
+        text = '\n'.join([point.get_text(strip=True) for point in bullet_points])
         translated_text = translate_text(text)
         
         return {
