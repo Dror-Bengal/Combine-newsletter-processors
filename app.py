@@ -100,6 +100,7 @@ def process_email():
         elif "dorie@dorieclark.com" in sender:
             logger.debug("Processing as Dorie Clark newsletter")
             result, status_code = process_dorie_clark(data)
+            logger.debug(f"Dorie Clark processor result: {result}")
         else:
             logger.error(f"Unknown newsletter source: {sender}")
             return jsonify({"error": f"Unknown newsletter source: {sender}"}), 400

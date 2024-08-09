@@ -31,29 +31,24 @@ def process_email(data):
 def extract_content_blocks(soup):
     content_blocks = []
     
-    # Extract main content
+    # Extract all content before the sponsored section
     main_content = extract_main_content(soup)
     if main_content:
         content_blocks.append(main_content)
-    
-    # Extract bullet points
-    bullet_points = extract_bullet_points(soup)
-    if bullet_points:
-        content_blocks.append(bullet_points)
     
     return content_blocks
 
 def extract_main_content(soup):
     main_content_div = soup.find('div', class_='message-content')
     if main_content_div:
-        paragraphs = []
-        for elem in main_content_div.find_all(['p', 'div'], recursive=False):
+        content = []
+        for elem in main_content_div.children:
             if elem.name == 'div' and 'padding-bottom:10px' in elem.get('style', ''):
                 break  # Stop when we reach the sponsored content
-            if elem.name == 'p':
-                paragraphs.append(elem.get_text(strip=True))
+            if elem.name in ['p', 'ul']:
+                content.append(elem.get_text(strip=True, separator='\n'))
         
-        text = '\n\n'.join(paragraphs)
+        text = '\n\n'.join(content)
         translated_text = translate_text(text)
         
         return {
@@ -65,26 +60,6 @@ def extract_main_content(soup):
             "enrichment_text": "",
             "main_category": "Newsletter",
             "sub_category": "Main Content",
-            "social_trend": ""
-        }
-    return None
-
-def extract_bullet_points(soup):
-    bullet_list = soup.find('ul', class_='unordered_list')
-    if bullet_list:
-        bullet_points = bullet_list.find_all('li', class_='list_item')
-        text = '\n'.join([point.get_text(strip=True) for point in bullet_points])
-        translated_text = translate_text(text)
-        
-        return {
-            "text": text,
-            "translated_text": translated_text,
-            "link": "",
-            "image": "",
-            "scoring": 2,
-            "enrichment_text": "",
-            "main_category": "Newsletter",
-            "sub_category": "Key Points",
             "social_trend": ""
         }
     return None
