@@ -1,13 +1,40 @@
 import logging
 from bs4 import BeautifulSoup
-from flask import jsonify
 from translator import translate_text, translate_content_block_async
 import requests
 import json
 import random
+import html2text
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+def create_base_output_structure(metadata):
+    return {
+        "metadata": {
+            "source_name": "Adweek Daily",
+            "sender_email": metadata.get('sender', ''),
+            "sender_name": metadata.get('Sender name', ''),
+            "date_sent": metadata.get('date', ''),
+            "subject": metadata.get('subject', ''),
+            "email_id": metadata.get('message-id', ''),
+            "translated_subject": translate_text(metadata.get('subject', ''))
+        },
+        "content": {
+            "main_content_html": metadata['content']['html'],
+            "main_content_text": "",
+            "translated_main_content_text": "",
+            "content_blocks": []
+        },
+        "additional_info": {
+            "attachments": [],
+            "engagement_metrics": {}
+        },
+        "translation_info": {
+            "translated_language": "he",
+            "translation_method": "Google Translate API"
+        }
+    }
 
 def process_email(data):
     try:
@@ -15,21 +42,20 @@ def process_email(data):
             return {"error": "Invalid JSON structure"}, 400
 
         content_html = data['metadata']['content']['html']
-        metadata = {
-            "date": data['metadata'].get('date'),
-            "sender": data['metadata'].get('sender'),
-            "subject": data['metadata'].get('subject'),
-            "Sender name": data['metadata'].get('Sender name')
-        }
+        metadata = data['metadata']
+        
+        output_json = create_base_output_structure(metadata)
+        
+        # Convert HTML to plain text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        output_json['content']['main_content_text'] = h.handle(content_html)
+        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
         
         soup = BeautifulSoup(content_html, 'html.parser')
 
         content_blocks = extract_content_blocks(soup)
-        
-        output_json = {
-            "metadata": metadata,
-            "content_blocks": content_blocks
-        }
+        output_json['content']['content_blocks'] = content_blocks
         
         return output_json, 200
 
@@ -68,16 +94,23 @@ def extract_main_story(soup):
         image = main_story.find('img', src=True)
         paragraphs = main_story.find_all('p')
         
+        body_text = ' '.join([p.text.strip() for p in paragraphs])
+        
         return {
-            'text': title.text.strip() if title else '',
-            'link': link['href'] if link else '',
-            'image': image['src'] if image else '',
-            'description': ' '.join([p.text.strip() for p in paragraphs]),
-            'scoring': 1,
-            'enrichment_text': generate_enrichment_text(link['href'] if link else ''),
-            'main_category': "Newsletter",
-            'sub_category': determine_sub_category(title.text if title else ''),
-            'social_trend': generate_social_trend(title.text if title else '')
+            "block_type": "main_story",
+            "title": title.text.strip() if title else '',
+            "translated_title": translate_text(title.text.strip() if title else ''),
+            "description": body_text[:200] + '...' if len(body_text) > 200 else body_text,
+            "translated_description": translate_text(body_text[:200] + '...' if len(body_text) > 200 else body_text),
+            "body_text": body_text,
+            "translated_body_text": translate_text(body_text),
+            "image_url": image['src'] if image else '',
+            "link_url": link['href'] if link else '',
+            "scoring": 1,
+            "category": "Newsletter",
+            "subcategory": determine_sub_category(title.text if title else ''),
+            "social_trend": generate_social_trend(title.text if title else ''),
+            "translated_social_trend": translate_text(generate_social_trend(title.text if title else ''))
         }
     return None
 
@@ -93,15 +126,20 @@ def extract_top_stories(soup):
             
             if title and link:
                 top_stories.append({
-                    'text': title.text.strip(),
-                    'link': link['href'],
-                    'image': image['src'] if image else '',
-                    'description': '',
-                    'scoring': idx,
-                    'enrichment_text': generate_enrichment_text(link['href']),
-                    'main_category': "Newsletter",
-                    'sub_category': determine_sub_category(title.text),
-                    'social_trend': generate_social_trend(title.text)
+                    "block_type": "top_story",
+                    "title": title.text.strip(),
+                    "translated_title": translate_text(title.text.strip()),
+                    "description": "",
+                    "translated_description": "",
+                    "body_text": "",
+                    "translated_body_text": "",
+                    "image_url": image['src'] if image else '',
+                    "link_url": link['href'],
+                    "scoring": idx,
+                    "category": "Newsletter",
+                    "subcategory": determine_sub_category(title.text),
+                    "social_trend": generate_social_trend(title.text),
+                    "translated_social_trend": translate_text(generate_social_trend(title.text))
                 })
     return top_stories
 
@@ -114,15 +152,20 @@ def extract_more_news(soup):
             link = item.find('a', href=True)
             if link:
                 more_news.append({
-                    'text': link.text.strip(),
-                    'link': link['href'],
-                    'image': '',
-                    'description': '',
-                    'scoring': idx,
-                    'enrichment_text': generate_enrichment_text(link['href']),
-                    'main_category': "Newsletter",
-                    'sub_category': determine_sub_category(link.text),
-                    'social_trend': generate_social_trend(link.text)
+                    "block_type": "news_highlight",
+                    "title": link.text.strip(),
+                    "translated_title": translate_text(link.text.strip()),
+                    "description": "",
+                    "translated_description": "",
+                    "body_text": "",
+                    "translated_body_text": "",
+                    "image_url": '',
+                    "link_url": link['href'],
+                    "scoring": idx,
+                    "category": "Newsletter",
+                    "subcategory": determine_sub_category(link.text),
+                    "social_trend": generate_social_trend(link.text),
+                    "translated_social_trend": translate_text(generate_social_trend(link.text))
                 })
     return more_news
 
@@ -136,15 +179,20 @@ def extract_one_more_thing(soup):
         
         if title and link:
             return {
-                'text': title.text.strip(),
-                'link': link['href'],
-                'image': image['src'] if image else '',
-                'description': description.text.strip() if description else '',
-                'scoring': len(extract_more_news(soup)) + 7,
-                'enrichment_text': generate_enrichment_text(link['href']),
-                'main_category': "Newsletter",
-                'sub_category': "One More Thing",
-                'social_trend': generate_social_trend(title.text)
+                "block_type": "one_more_thing",
+                "title": title.text.strip(),
+                "translated_title": translate_text(title.text.strip()),
+                "description": description.text.strip() if description else '',
+                "translated_description": translate_text(description.text.strip() if description else ''),
+                "body_text": description.text.strip() if description else '',
+                "translated_body_text": translate_text(description.text.strip() if description else ''),
+                "image_url": image['src'] if image else '',
+                "link_url": link['href'],
+                "scoring": len(extract_more_news(soup)) + 7,
+                "category": "Newsletter",
+                "subcategory": "One More Thing",
+                "social_trend": generate_social_trend(title.text),
+                "translated_social_trend": translate_text(generate_social_trend(title.text))
             }
     return None
 
@@ -227,3 +275,5 @@ def determine_sub_category(text):
 def generate_social_trend(text):
     words = text.split()[:2]
     return f"#{words[0]}{words[1]}" if len(words) > 1 else "#AdweekTrend"
+
+# No Flask app or route decorators in this file

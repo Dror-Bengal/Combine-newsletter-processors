@@ -2,9 +2,37 @@ import json
 from bs4 import BeautifulSoup
 import logging
 from translator import translate_text
+import html2text
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+def create_base_output_structure(metadata):
+    return {
+        "metadata": {
+            "source_name": "Simon Sinek's Notes to Inspire",
+            "sender_email": metadata.get('sender', ''),
+            "sender_name": metadata.get('Sender name', ''),
+            "date_sent": metadata.get('date', ''),
+            "subject": metadata.get('subject', ''),
+            "email_id": metadata.get('message-id', ''),
+            "translated_subject": translate_text(metadata.get('subject', ''))
+        },
+        "content": {
+            "main_content_html": metadata['content']['html'],
+            "main_content_text": "",
+            "translated_main_content_text": "",
+            "content_blocks": []
+        },
+        "additional_info": {
+            "attachments": [],
+            "engagement_metrics": {}
+        },
+        "translation_info": {
+            "translated_language": "he",
+            "translation_method": "Google Translate API"
+        }
+    }
 
 def process_email(data):
     logger.debug("Starting to process Simon Sinek's 'Notes to Inspire' email")
@@ -16,14 +44,18 @@ def process_email(data):
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
+        output_json = create_base_output_structure(metadata)
+        
         soup = BeautifulSoup(content_html, 'html.parser')
 
+        # Convert HTML to plain text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        output_json['content']['main_content_text'] = h.handle(content_html)
+        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
+
         content_block = extract_content_block(soup)
-        
-        output_json = {
-            "metadata": metadata,
-            "content_blocks": [content_block]
-        }
+        output_json['content']['content_blocks'] = [content_block]
         
         logger.debug("Successfully processed Simon Sinek's email")
         return output_json, 200
@@ -47,23 +79,20 @@ def extract_content_block(soup):
 
     main_content = content_container.get_text(strip=True)
 
-    # Translate content
-    try:
-        translated_content = translate_text(main_content)
-    except Exception as e:
-        logger.error(f"Translation failed: {str(e)}")
-        translated_content = main_content
-
     content_block = {
-        "text": main_content,
-        "translated_text": translated_content,
-        "image": image_url,
-        "link": "",  # No specific link in this newsletter format
-        "scoring": 1,
-        "enrichment_text": "",  # No specific enrichment for this format
-        "main_category": "Notes to Inspire",
-        "sub_category": "Daily Inspiration",
-        "social_trend": generate_social_trend(main_content)
+        "block_type": "inspiration",
+        "title": "Simon Sinek's Note to Inspire",
+        "translated_title": translate_text("Simon Sinek's Note to Inspire"),
+        "description": main_content[:200] + "..." if len(main_content) > 200 else main_content,
+        "translated_description": translate_text(main_content[:200] + "..." if len(main_content) > 200 else main_content),
+        "body_text": main_content,
+        "translated_body_text": translate_text(main_content),
+        "image_url": image_url,
+        "link_url": "",  # No specific link in this newsletter format
+        "category": "Notes to Inspire",
+        "subcategory": "Daily Inspiration",
+        "social_trend": generate_social_trend(main_content),
+        "translated_social_trend": translate_text(generate_social_trend(main_content))
     }
 
     return content_block

@@ -1,13 +1,41 @@
-from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
 import re
-from translator import translate_text  # Import the translation function
+from translator import translate_text
+import html2text
 
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+def create_base_output_structure(metadata):
+    return {
+        "metadata": {
+            "source_name": "Creative Bloq",
+            "sender_email": metadata.get('sender', ''),
+            "sender_name": metadata.get('Sender name', ''),
+            "date_sent": metadata.get('date', ''),
+            "subject": metadata.get('subject', ''),
+            "email_id": metadata.get('message-id', ''),
+            "translated_subject": translate_text(metadata.get('subject', ''))
+        },
+        "content": {
+            "main_content_html": metadata['content']['html'],
+            "main_content_text": "",
+            "translated_main_content_text": "",
+            "content_blocks": []
+        },
+        "additional_info": {
+            "attachments": [],
+            "engagement_metrics": {}
+        },
+        "translation_info": {
+            "translated_language": "he",
+            "translation_method": "Google Translate API"
+        }
+    }
 
 def process_email(data):
-    logging.debug(f"Received request data: {data}")
+    logger.debug(f"Received request data: {data}")
     try:
         if 'metadata' not in data or 'content' not in data['metadata']:
             raise KeyError("Missing 'content' key in the 'metadata' section of the JSON payload")
@@ -15,28 +43,27 @@ def process_email(data):
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
-        logging.debug(f"Content: {content_html}")
-        logging.debug(f"Metadata: {metadata}")
+        output_json = create_base_output_structure(metadata)
+
+        # Convert HTML to plain text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        output_json['content']['main_content_text'] = h.handle(content_html)
+        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
 
         # Extract stories from the HTML content
         content_blocks = extract_stories(content_html)
+        output_json['content']['content_blocks'] = content_blocks
         
-        logging.debug(f"Extracted content blocks: {content_blocks}")
-
-        output_json = {
-            "metadata": metadata,
-            "content_blocks": content_blocks
-        }
+        logger.debug(f"Final output JSON: {output_json}")
         
-        logging.debug(f"Final output JSON: {output_json}")
-        
-        return jsonify(output_json), 200
+        return output_json, 200
     except KeyError as e:
-        logging.error(f"KeyError: {str(e)}")
-        return jsonify({"error": str(e)}), 400
+        logger.error(f"KeyError: {str(e)}")
+        return {"error": str(e)}, 400
     except Exception as e:
-        logging.error(f"Error processing email: {str(e)}")
-        return jsonify({"error": str(e)}), 400
+        logger.error(f"Error processing email: {str(e)}")
+        return {"error": str(e)}, 400
 
 def extract_stories(content):
     stories = []
@@ -59,50 +86,48 @@ def extract_stories(content):
         story_blocks = block.find_all('table', class_='name-60')
         
         for story in story_blocks:
-            story_data = {'scoring': score}
+            story_data = {
+                "block_type": "article",
+                "scoring": score
+            }
             
             # Extract headline
             headline = story.find('div', attrs={'data-testid': 'copy_headline'})
             if headline:
-                story_data['text'] = headline.text.strip()
+                story_data['title'] = headline.text.strip()
+                story_data['translated_title'] = translate_text(story_data['title'])
             
             # Extract additional text
             additional_text = story.find('div', class_='name-100')
             if additional_text:
                 story_data['description'] = additional_text.text.strip()
+                story_data['translated_description'] = translate_text(story_data['description'])
             
             # Extract link
             link = story.find('a', attrs={'data-testid': 'cta_link'})
             if link:
-                story_data['link'] = link['href']
+                story_data['link_url'] = link['href']
             
             # Extract image
             img = story.find('img', class_='scale_full_width')
             if img:
-                story_data['image'] = img['src']
+                story_data['image_url'] = img['src']
             
             # Add other required fields
-            story_data['enrichment_text'] = generate_enrichment_text(story_data.get('text', ''))
-            story_data['main_category'] = main_category
-            story_data['sub_category'] = determine_sub_category(story_data.get('text', ''))
-            story_data['social_trend'] = generate_social_trend(story_data.get('text', ''))
+            story_data['body_text'] = story_data.get('description', '')
+            story_data['translated_body_text'] = story_data.get('translated_description', '')
+            story_data['category'] = main_category
+            story_data['subcategory'] = determine_sub_category(story_data.get('title', ''))
+            story_data['social_trend'] = generate_social_trend(story_data.get('title', ''))
+            story_data['translated_social_trend'] = translate_text(story_data['social_trend'])
             
-            # Add translated fields
-            story_data['translated_text'] = translate_text(story_data.get('text', ''))
-            story_data['translated_description'] = translate_text(story_data.get('description', ''))
-            
-            if story_data.get('text') and (story_data.get('image') or story_data.get('link')):
+            if story_data.get('title') and (story_data.get('image_url') or story_data.get('link_url')):
                 stories.append(story_data)
                 score += 1  # Increment score for next item
     
     return stories
 
-def generate_enrichment_text(text):
-    # This is a placeholder. In a real scenario, you might use NLP or AI to generate this.
-    return f"Enriched version of: {text[:50]}..."
-
 def determine_sub_category(text):
-    # This is a simple example. You might use more sophisticated categorization in reality.
     categories = {
         'News': ['news', 'latest'],
         'Reviews': ['review', 'tested'],
@@ -121,6 +146,7 @@ def determine_sub_category(text):
     return "General"
 
 def generate_social_trend(text):
-    # This is a simple example. You might use actual trending topics or AI-generated trends.
     words = text.split()[:2]  # Use first two words of the story
-    return f"#{words[0]}{words[1]}" if len(words) > 1 else "#Trending"
+    return f"#{words[0]}{words[1]}" if len(words) > 1 else "#CreativeBloq"
+
+# No Flask app or route decorators in this file

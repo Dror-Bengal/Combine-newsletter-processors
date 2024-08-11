@@ -4,9 +4,37 @@ from datetime import datetime
 from translator import translate_text
 import logging
 import json
+import html2text
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+def create_base_output_structure(metadata):
+    return {
+        "metadata": {
+            "source_name": "Axios Media Trends",
+            "sender_email": metadata.get('sender', ''),
+            "sender_name": metadata.get('Sender name', ''),
+            "date_sent": metadata.get('date', ''),
+            "subject": metadata.get('subject', ''),
+            "email_id": metadata.get('message-id', ''),
+            "translated_subject": translate_text(metadata.get('subject', ''))
+        },
+        "content": {
+            "main_content_html": metadata['content']['html'],
+            "main_content_text": "",
+            "translated_main_content_text": "",
+            "content_blocks": []
+        },
+        "additional_info": {
+            "attachments": [],
+            "engagement_metrics": {}
+        },
+        "translation_info": {
+            "translated_language": "he",
+            "translation_method": "Google Translate API"
+        }
+    }
 
 def process_axios_media_trends(data):
     logger.debug("Starting to process Axios Media Trends email")
@@ -23,19 +51,23 @@ def process_axios_media_trends(data):
             logger.info("Email is not from Sara Fischer at Axios")
             return {"error": "Not an Axios Media Trends newsletter"}, 400
         
+        output_json = create_base_output_structure(metadata)
+        
         logger.debug(f"Content HTML length: {len(content_html)}")
         
         soup = BeautifulSoup(content_html, 'html.parser')
         logger.debug(f"BeautifulSoup object created. Number of tags: {len(soup.find_all())}")
 
+        # Convert HTML to plain text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        output_json['content']['main_content_text'] = h.handle(content_html)
+        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
+
         content_blocks = extract_content_blocks(soup)
+        output_json['content']['content_blocks'] = content_blocks
         
         logger.debug(f"Number of content blocks extracted: {len(content_blocks)}")
-        
-        output_json = {
-            "metadata": metadata,
-            "content_blocks": content_blocks
-        }
         
         logger.debug(f"Processed output: {json.dumps(output_json, indent=2)}")
         return output_json, 200
@@ -90,16 +122,20 @@ def extract_content_blocks(soup):
         image_url = img['src'] if img else ""
         
         block = {
-            "text": headline_text,
-            "translated_text": translate_text(headline_text),
-            "description": content,
-            "translated_description": translate_text(content),
-            "image": image_url,
-            "link": link,
+            "block_type": "article",
+            "title": headline_text,
+            "translated_title": translate_text(headline_text),
+            "description": content[:200] + "..." if len(content) > 200 else content,
+            "translated_description": translate_text(content[:200] + "..." if len(content) > 200 else content),
+            "body_text": content,
+            "translated_body_text": translate_text(content),
+            "image_url": image_url,
+            "link_url": link,
             "scoring": len(content_blocks) + 1,  # Update scoring to be consecutive
-            "main_category": "Newsletter",
-            "sub_category": determine_sub_category(headline_text),
-            "social_trend": generate_social_trend(headline_text)
+            "category": "Newsletter",
+            "subcategory": determine_sub_category(headline_text),
+            "social_trend": generate_social_trend(headline_text),
+            "translated_social_trend": translate_text(generate_social_trend(headline_text))
         }
         
         content_blocks.append(block)
@@ -127,3 +163,5 @@ def determine_sub_category(text):
 def generate_social_trend(text):
     words = text.split()[:2]
     return f"#{words[0]}{words[1]}" if len(words) > 1 else "#AxiosMediaTrends"
+
+# No Flask app or route decorators in this file

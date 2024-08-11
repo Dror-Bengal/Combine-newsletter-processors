@@ -1,9 +1,37 @@
 import logging
 from bs4 import BeautifulSoup
 from translator import translate_text
+import html2text
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+def create_base_output_structure(metadata):
+    return {
+        "metadata": {
+            "source_name": "Harvard Business Review Management Tip of the Day",
+            "sender_email": metadata.get('sender', ''),
+            "sender_name": metadata.get('Sender name', ''),
+            "date_sent": metadata.get('date', ''),
+            "subject": metadata.get('subject', ''),
+            "email_id": metadata.get('message-id', ''),
+            "translated_subject": translate_text(metadata.get('subject', ''))
+        },
+        "content": {
+            "main_content_html": metadata['content']['html'],
+            "main_content_text": "",
+            "translated_main_content_text": "",
+            "content_blocks": []
+        },
+        "additional_info": {
+            "attachments": [],
+            "engagement_metrics": {}
+        },
+        "translation_info": {
+            "translated_language": "he",
+            "translation_method": "Google Translate API"
+        }
+    }
 
 def process_email(data):
     try:
@@ -14,15 +42,20 @@ def process_email(data):
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
+        output_json = create_base_output_structure(metadata)
+        
         soup = BeautifulSoup(content_html, 'html.parser')
+
+        # Convert HTML to plain text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        output_json['content']['main_content_text'] = h.handle(content_html)
+        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
 
         content_block = extract_content(soup)
         
         if content_block:
-            output_json = {
-                "metadata": metadata,
-                "content_blocks": [content_block]
-            }
+            output_json['content']['content_blocks'] = [content_block]
             return output_json, 200
         else:
             return {"error": "Failed to extract content"}, 400
@@ -64,21 +97,20 @@ def extract_content(soup):
         source_div = main_content.find('div', style=lambda s: s and 'font-family:Helvetica Neue,Helvetica,Arial,sans-serif' in s)
         source_text = source_div.get_text(strip=True) if source_div else ""
 
-        # Translate content
-        translated_subject = translate_text(title_text)
-        translated_text = translate_text(tip_text)
-
         content_block = {
-            "text": tip_text,
-            "translated_text": translated_text,
-            "translated_subject": translated_subject,
-            "link": "",  # No specific link found in the content
-            "image": "",  # No image found in the content
-            "scoring": 1,
-            "enrichment_text": source_text,
-            "main_category": "Management Tip",
-            "sub_category": determine_sub_category(title_text),
-            "social_trend": generate_social_trend(title_text)
+            "block_type": "management_tip",
+            "title": title_text,
+            "translated_title": translate_text(title_text),
+            "description": tip_text[:200] + "..." if len(tip_text) > 200 else tip_text,
+            "translated_description": translate_text(tip_text[:200] + "..." if len(tip_text) > 200 else tip_text),
+            "body_text": tip_text,
+            "translated_body_text": translate_text(tip_text),
+            "image_url": "",  # No image found in the content
+            "link_url": "",  # No specific link found in the content
+            "category": "Management Tip",
+            "subcategory": determine_sub_category(title_text),
+            "social_trend": generate_social_trend(title_text),
+            "translated_social_trend": translate_text(generate_social_trend(title_text))
         }
 
         return content_block
@@ -104,3 +136,5 @@ def determine_sub_category(text):
 def generate_social_trend(text):
     words = text.split()[:2]  # Use first two words of the title
     return f"#{''.join(words)}" if len(words) > 1 else "#ManagementTip"
+
+# No Flask app or route decorators in this file

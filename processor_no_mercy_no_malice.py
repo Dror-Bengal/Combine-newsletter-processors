@@ -14,6 +14,7 @@ from sumy.summarizers.lsa import LsaSummarizer as Summarizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words
 import datetime
+import html2text
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -37,6 +38,33 @@ sample_texts = ["The economy is growing", "New sports results", "Tech company la
 sample_categories = ["Economics", "Sports", "Technology"]
 category_classifier.fit(sample_texts, sample_categories)
 
+def create_base_output_structure(metadata):
+    return {
+        "metadata": {
+            "source_name": "No Mercy No Malice",
+            "sender_email": metadata.get('sender', ''),
+            "sender_name": metadata.get('Sender name', ''),
+            "date_sent": metadata.get('date', ''),
+            "subject": metadata.get('subject', ''),
+            "email_id": metadata.get('message-id', ''),
+            "translated_subject": translate_text(metadata.get('subject', ''))
+        },
+        "content": {
+            "main_content_html": metadata['content']['html'],
+            "main_content_text": "",
+            "translated_main_content_text": "",
+            "content_blocks": []
+        },
+        "additional_info": {
+            "attachments": [],
+            "engagement_metrics": {}
+        },
+        "translation_info": {
+            "translated_language": "he",
+            "translation_method": "Google Translate API"
+        }
+    }
+
 def process_email(data):
     logger.debug("Starting process_email function")
     try:
@@ -45,16 +73,22 @@ def process_email(data):
             return {"error": "Invalid JSON structure"}, 400
 
         content_html = data['metadata']['content']['html']
+        metadata = data['metadata']
+        
+        output_json = create_base_output_structure(metadata)
         
         soup = BeautifulSoup(content_html, 'html.parser')
 
+        # Convert HTML to plain text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        output_json['content']['main_content_text'] = h.handle(content_html)
+        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
+
         content_blocks = extract_content_blocks(soup)
+        output_json['content']['content_blocks'] = content_blocks
         
-        output_json = {
-            "content_blocks": content_blocks
-        }
-        
-        logger.debug(f"Processed output: {output_json}")
+        logger.debug(f"Processed output: {json.dumps(output_json, indent=2)}")
         return output_json, 200
 
     except Exception as e:
@@ -78,22 +112,19 @@ def extract_content_blocks(soup):
         enriched_data = enrich_content(main_content)
         
         content_blocks.append({
-            "text": main_content,
-            "enrichment_text": enriched_data['main_point'],
-            "image": "",
-            "link": "",
-            "scoring": enriched_data['score'],
-            "main_category": enriched_data['main_category'],
-            "sub_category": enriched_data['sub_category'],
+            "block_type": "article",
+            "title": enriched_data['main_point'][:100],  # Use the first 100 characters of the main point as the title
+            "translated_title": translate_text(enriched_data['main_point'][:100]),
+            "description": main_content[:200] + "..." if len(main_content) > 200 else main_content,
+            "translated_description": translate_text(main_content[:200] + "..." if len(main_content) > 200 else main_content),
+            "body_text": main_content,
+            "translated_body_text": translated_content,
+            "image_url": "",
+            "link_url": "",
+            "category": enriched_data['main_category'],
+            "subcategory": enriched_data['sub_category'],
             "social_trend": enriched_data['social_trend'],
-            "translated_text": add_headlines(translated_content),
-            "tags": enriched_data['tags'],
-            "sentiment": enriched_data['sentiment'],
-            "related_topics": enriched_data['related_topics'],
-            "engagement_potential": enriched_data['engagement_potential'],
-            "audience_targeting": enriched_data['audience_targeting'],
-            "urgency": enriched_data['urgency'],
-            "source_credibility": enriched_data['source_credibility']
+            "translated_social_trend": translate_text(enriched_data['social_trend'])
         })
 
     logger.debug(f"Extracted {len(content_blocks)} content blocks")
@@ -114,16 +145,6 @@ def extract_main_content(soup):
 
     logger.debug(f"Extracted main content (length: {len(main_content)})")
     return main_content
-
-def add_headlines(text):
-    lines = text.split('\n')
-    result = []
-    for line in lines:
-        if len(line) <= 50 and not line.endswith('.'):
-            result.append(f"<headline>{line}</headline>")
-        else:
-            result.append(line)
-    return '\n'.join(result)
 
 def enrich_content(text):
     logger.debug("Starting content enrichment")
@@ -187,7 +208,7 @@ def enrich_content(text):
 
         # Social trend (simple example)
         words = text.split()[:2]
-        result['social_trend'] = f"#{words[0]}{words[1]}" if len(words) > 1 else "#Trending"
+        result['social_trend'] = f"#{words[0]}{words[1]}" if len(words) > 1 else "#NoMercyNoMalice"
         logger.debug(f"Generated social trend: {result['social_trend']}")
 
         # Engagement Potential

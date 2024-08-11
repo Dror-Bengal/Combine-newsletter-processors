@@ -2,14 +2,41 @@ import re
 import json
 import random
 import requests
-from flask import jsonify
 from bs4 import BeautifulSoup
 import logging
 from translator import translate_text, translate_long_text
 from celery import shared_task
+import html2text
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+def create_base_output_structure(metadata):
+    return {
+        "metadata": {
+            "source_name": "Adweek Advertising & Agency Daily",
+            "sender_email": metadata.get('sender', ''),
+            "sender_name": metadata.get('Sender name', ''),
+            "date_sent": metadata.get('date', ''),
+            "subject": metadata.get('subject', ''),
+            "email_id": metadata.get('message-id', ''),
+            "translated_subject": translate_text(metadata.get('subject', ''))
+        },
+        "content": {
+            "main_content_html": metadata['content']['html'],
+            "main_content_text": "",
+            "translated_main_content_text": "",
+            "content_blocks": []
+        },
+        "additional_info": {
+            "attachments": [],
+            "engagement_metrics": {}
+        },
+        "translation_info": {
+            "translated_language": "he",
+            "translation_method": "Google Translate API"
+        }
+    }
 
 @shared_task
 def process_email(data):
@@ -18,21 +45,20 @@ def process_email(data):
             return {"error": "Invalid JSON structure"}, 400
 
         content_html = data['metadata']['content']['html']
-        metadata = {
-            "date": data['metadata'].get('date'),
-            "sender": data['metadata'].get('sender'),
-            "subject": data['metadata'].get('subject'),
-            "Sender name": data['metadata'].get('Sender name')
-        }
+        metadata = data['metadata']
+        
+        output_json = create_base_output_structure(metadata)
+        
+        # Convert HTML to plain text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        output_json['content']['main_content_text'] = h.handle(content_html)
+        output_json['content']['translated_main_content_text'] = translate_long_text(output_json['content']['main_content_text'])
         
         soup = BeautifulSoup(content_html, 'html.parser')
 
         content_blocks = extract_content_blocks(soup)
-        
-        output_json = {
-            "metadata": metadata,
-            "content_blocks": content_blocks
-        }
+        output_json['content']['content_blocks'] = content_blocks
         
         return output_json, 200
 
@@ -68,38 +94,26 @@ def extract_content_blocks(soup):
         enrichment_text = generate_enrichment_text(link)
 
         content_block = {
-            "text": title,
-            "link": link,
-            "image": image,
+            "block_type": "article",
+            "title": title,
+            "translated_title": translate_text(title),
             "description": description,
-            "enrichment_text": enrichment_text,
-            "main_category": "Newsletter",
-            "sub_category": determine_sub_category(title),
+            "translated_description": translate_text(description),
+            "body_text": enrichment_text,
+            "translated_body_text": translate_long_text(enrichment_text),
+            "image_url": image,
+            "link_url": link,
+            "category": "Newsletter",
+            "subcategory": determine_sub_category(title),
             "social_trend": generate_social_trend(title),
+            "translated_social_trend": translate_text(generate_social_trend(title)),
             "scoring": score,
         }
-
-        translate_block_content(content_block)
 
         content_blocks.append(content_block)
         score += 1
 
     return content_blocks
-
-def translate_block_content(block):
-    try:
-        for field in ['text', 'description', 'enrichment_text']:
-            if field in block and block[field]:
-                logger.info(f"Translating {field} (length: {len(block[field])})")
-                if len(block[field]) > 5000:
-                    block[f'translated_{field}'] = translate_long_text(block[field])
-                else:
-                    block[f'translated_{field}'] = translate_text(block[field])
-    except Exception as e:
-        logger.error(f"Translation error: {str(e)}")
-        for field in ['text', 'description', 'enrichment_text']:
-            if field in block:
-                block[f'translated_{field}'] = block[field]
 
 def generate_enrichment_text(link):
     text = get_adweek_article(link)
