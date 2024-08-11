@@ -45,18 +45,22 @@ def extract_content_blocks(soup):
     # Find all story sections
     story_sections = soup.find_all('td', class_='post-text')
     
-    for idx, section in enumerate(story_sections, start=1):
+    for section in story_sections:
         # Extract headline
         headline = section.find_previous('span', class_='bodytext hed')
         headline_text = headline.text.strip() if headline else ""
         
-        # Skip sponsored content
-        if "Axios Pro Reports" in headline_text:
+        # Skip sponsored content and the introductory section
+        if "Axios Pro Reports" in headline_text or "Today's Media Trends" in headline_text:
             continue
         
         # Extract content
         paragraphs = section.find_all('p')
         content = "\n\n".join([p.get_text(strip=True) for p in paragraphs])
+        
+        # Skip if content is empty after stripping
+        if not content.strip():
+            continue
         
         # Extract links
         links = section.find_all('a', href=True)
@@ -73,7 +77,7 @@ def extract_content_blocks(soup):
             "translated_description": translate_text(content),
             "image": image_url,
             "link": link,
-            "scoring": idx,
+            "scoring": len(content_blocks) + 1,  # Update scoring to be consecutive
             "main_category": "Newsletter",
             "sub_category": determine_sub_category(headline_text),
             "social_trend": generate_social_trend(headline_text)
