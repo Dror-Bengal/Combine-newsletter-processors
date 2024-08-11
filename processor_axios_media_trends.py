@@ -51,11 +51,12 @@ def is_axios_media_trends(metadata):
     
     is_correct_sender = 'sara@axios.com' in sender
     is_correct_name = 'sara fischer' in sender_name
-    is_media_trends = 'media trends' in subject
+    is_axios_newsletter = 'axios' in subject
     
-    logger.debug(f"Sender check: {is_correct_sender}, Name check: {is_correct_name}, Subject check: {is_media_trends}")
+    logger.debug(f"Sender check: {is_correct_sender}, Name check: {is_correct_name}, Subject check: {is_axios_newsletter}")
+    logger.debug(f"Full subject: {subject}")
     
-    return is_correct_sender and is_correct_name and is_media_trends
+    return is_correct_sender and is_correct_name and is_axios_newsletter
 
 def extract_content_blocks(soup):
     content_blocks = []
