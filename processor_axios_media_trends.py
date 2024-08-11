@@ -18,6 +18,11 @@ def process_axios_media_trends(data):
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
+        # Check if the email is from Sara Fischer at Axios
+        if not is_axios_media_trends(metadata):
+            logger.info("Email is not from Sara Fischer at Axios")
+            return {"error": "Not an Axios Media Trends newsletter"}, 400
+        
         logger.debug(f"Content HTML length: {len(content_html)}")
         
         soup = BeautifulSoup(content_html, 'html.parser')
@@ -38,6 +43,19 @@ def process_axios_media_trends(data):
     except Exception as e:
         logger.exception("Unexpected error in process_axios_media_trends")
         return {"error": str(e)}, 500
+
+def is_axios_media_trends(metadata):
+    sender = metadata.get('sender', '').lower()
+    sender_name = metadata.get('Sender name', '').lower()
+    subject = metadata.get('subject', '').lower()
+    
+    is_correct_sender = 'sara@axios.com' in sender
+    is_correct_name = 'sara fischer' in sender_name
+    is_media_trends = 'media trends' in subject
+    
+    logger.debug(f"Sender check: {is_correct_sender}, Name check: {is_correct_name}, Subject check: {is_media_trends}")
+    
+    return is_correct_sender and is_correct_name and is_media_trends
 
 def extract_content_blocks(soup):
     content_blocks = []
@@ -108,10 +126,3 @@ def determine_sub_category(text):
 def generate_social_trend(text):
     words = text.split()[:2]
     return f"#{words[0]}{words[1]}" if len(words) > 1 else "#AxiosMediaTrends"
-
-# This function is not used in the current implementation but could be useful for future enhancements
-def extract_date(soup):
-    date_string = soup.find('span', string=re.compile(r'\w+, \w+ \d{2}, \d{4}'))
-    if date_string:
-        return datetime.strptime(date_string.text.strip(), '%A, %B %d, %Y')
-    return None
