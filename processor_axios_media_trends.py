@@ -47,8 +47,12 @@ def extract_content_blocks(soup):
     
     for idx, section in enumerate(story_sections, start=1):
         # Extract headline
-        headline = section.find('strong')
+        headline = section.find_previous('span', class_='bodytext hed')
         headline_text = headline.text.strip() if headline else ""
+        
+        # Skip sponsored content
+        if "Axios Pro Reports" in headline_text:
+            continue
         
         # Extract content
         paragraphs = section.find_all('p')
