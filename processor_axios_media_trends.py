@@ -5,7 +5,7 @@ from translator import translate_text
 import logging
 import json
 import html2text
-from newsletter_utils import process_content_block  # Add this new import
+from newsletter_utils import process_content_block
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -132,26 +132,5 @@ def extract_content_blocks(soup):
         logger.debug(f"Processed story: {headline_text}")
     
     return content_blocks
-
-def determine_sub_category(text):
-    categories = {
-        'AI': ['AI', 'artificial intelligence', 'machine learning'],
-        'Media': ['media', 'streaming', 'broadcast', 'publishing'],
-        'Technology': ['tech', 'software', 'hardware', 'digital'],
-        'Business': ['business', 'company', 'industry', 'market'],
-        'Advertising': ['ad', 'advertising', 'marketing'],
-        'Social Media': ['social media', 'platform', 'network'],
-        'Politics': ['politics', 'election', 'campaign'],
-        'Entertainment': ['entertainment', 'Hollywood', 'streaming']
-    }
-    
-    for category, keywords in categories.items():
-        if any(keyword.lower() in text.lower() for keyword in keywords):
-            return category
-    return "General"
-
-def generate_social_trend(text):
-    words = text.split()[:2]
-    return f"#{words[0]}{words[1]}" if len(words) > 1 else "#AxiosMediaTrends"
 
 # No Flask app or route decorators in this file
