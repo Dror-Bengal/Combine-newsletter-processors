@@ -5,6 +5,7 @@ from translator import translate_text
 import logging
 import json
 import html2text
+from newsletter_utils import process_content_block  # Add this new import
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -46,7 +47,6 @@ def process_axios_media_trends(data):
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
-        # Check if the email is from Sara Fischer at Axios
         if not is_axios_media_trends(metadata):
             logger.info("Email is not from Sara Fischer at Axios")
             return {"error": "Not an Axios Media Trends newsletter"}, 400
@@ -58,16 +58,16 @@ def process_axios_media_trends(data):
         soup = BeautifulSoup(content_html, 'html.parser')
         logger.debug(f"BeautifulSoup object created. Number of tags: {len(soup.find_all())}")
 
-        # Convert HTML to plain text
         h = html2text.HTML2Text()
         h.ignore_links = False
         output_json['content']['main_content_text'] = h.handle(content_html)
         output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
 
         content_blocks = extract_content_blocks(soup)
-        output_json['content']['content_blocks'] = content_blocks
+        processed_blocks = [block for block in content_blocks if block is not None]
+        output_json['content']['content_blocks'] = processed_blocks
         
-        logger.debug(f"Number of content blocks extracted: {len(content_blocks)}")
+        logger.debug(f"Number of content blocks extracted: {len(processed_blocks)}")
         
         logger.debug(f"Processed output: {json.dumps(output_json, indent=2)}")
         return output_json, 200
@@ -93,31 +93,24 @@ def is_axios_media_trends(metadata):
 def extract_content_blocks(soup):
     content_blocks = []
     
-    # Find all story sections
     story_sections = soup.find_all('td', class_='post-text')
     
     for section in story_sections:
-        # Extract headline
         headline = section.find_previous('span', class_='bodytext hed')
         headline_text = headline.text.strip() if headline else ""
         
-        # Skip sponsored content and the introductory section
         if "Axios Pro Reports" in headline_text or "Today's Media Trends" in headline_text:
             continue
         
-        # Extract content
         paragraphs = section.find_all('p')
         content = "\n\n".join([p.get_text(strip=True) for p in paragraphs])
         
-        # Skip if content is empty after stripping
         if not content.strip():
             continue
         
-        # Extract links
         links = section.find_all('a', href=True)
         link = links[0]['href'] if links else ""
         
-        # Extract image (if any)
         img = section.find('img')
         image_url = img['src'] if img else ""
         
@@ -131,14 +124,11 @@ def extract_content_blocks(soup):
             "translated_body_text": translate_text(content),
             "image_url": image_url,
             "link_url": link,
-            "scoring": len(content_blocks) + 1,  # Update scoring to be consecutive
-            "category": "Newsletter",
-            "subcategory": determine_sub_category(headline_text),
-            "social_trend": generate_social_trend(headline_text),
-            "translated_social_trend": translate_text(generate_social_trend(headline_text))
         }
         
-        content_blocks.append(block)
+        processed_block = process_content_block(block)
+        if processed_block:
+            content_blocks.append(processed_block)
         logger.debug(f"Processed story: {headline_text}")
     
     return content_blocks

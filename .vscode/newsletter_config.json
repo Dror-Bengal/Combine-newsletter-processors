@@ -1,0 +1,34 @@
+{
+    "categories": {
+      "Startup and Entrepreneurship": ["startup", "entrepreneur", "founder", "business idea"],
+      "Venture Capital and Funding": ["venture capital", "VC", "funding", "investor", "investment"],
+      "Marketing and Advertising": ["marketing", "advertising", "branding", "campaign"],
+      "Leadership and Management": ["leadership", "management", "CEO", "executive"],
+      "Productivity and Personal Development": ["productivity", "personal development", "self-improvement"],
+      "Innovation and Technology": ["innovation", "technology", "tech", "AI", "machine learning"],
+      "Financial Markets and Investing": ["financial markets", "investing", "stocks", "bonds"],
+      "E-commerce and Retail": ["e-commerce", "retail", "online shopping"],
+      "Sales Strategies": ["sales", "customer acquisition", "lead generation"],
+      "Corporate Strategy and Growth": ["corporate strategy", "growth", "scaling"],
+      "Business Law and Regulations": ["business law", "regulations", "compliance"],
+      "Customer Experience and Success": ["customer experience", "customer success", "CX"],
+      "Human Resources and Talent Management": ["HR", "human resources", "talent management", "recruitment"],
+      "Sustainability and Corporate Responsibility": ["sustainability", "CSR", "corporate responsibility"],
+      "Industry-Specific News": ["healthcare", "real estate", "finance", "tech industry"],
+      "Small Business and Local Enterprises": ["small business", "local business", "SME"],
+      "Digital Transformation and Automation": ["digital transformation", "automation", "digitalization"],
+      "Data Analytics and Business Intelligence": ["data analytics", "business intelligence", "BI", "big data"],
+      "Business Trends and Market Insights": ["business trends", "market insights", "industry analysis"],
+      "Global Trade and International Business": ["global trade", "international business", "export", "import"]
+    },
+    "ad_keywords": [
+      "Sponsored Content", "Advertisement", "Paid Promotion", "Brought to You By",
+      "Partnered With", "Special Offer", "Sponsored by", "Promoted", "Exclusive Offer",
+      "Limited Time Offer", "Coupon", "Discount Code", "Exclusive Deals", "Act Now",
+      "Sale", "Clearance", "Upcoming Event", "Join Us", "Save the Date", "Register Now",
+      "Exclusive Invitation", "Webinar", "Live Event", "Conference", "Workshop",
+      "Networking Opportunity", "RSVP", "Limited Seats", "Event Highlights",
+      "Featured Speaker", "Panel Discussion", "Keynote Address", "Agenda",
+      "Event Schedule", "Virtual Event", "In-Person Event", "Don't Miss"
+    ]
+  }
