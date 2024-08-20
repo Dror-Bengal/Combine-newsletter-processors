@@ -117,9 +117,6 @@ def extract_content_blocks(soup):
         block = {
             "block_type": "article",
             "title": headline_text,
-            "translated_title": translate_text(headline_text),
-            "description": content[:200] + "..." if len(content) > 200 else content,
-            "translated_description": translate_text(content[:200] + "..." if len(content) > 200 else content),
             "body_text": content,
             "translated_body_text": translate_text(content),
             "image_url": image_url,
@@ -127,7 +124,7 @@ def extract_content_blocks(soup):
         }
         
         processed_block = process_content_block(block)
-        if processed_block:
+        if processed_block['block_type'] != 'removed':
             content_blocks.append(processed_block)
         logger.debug(f"Processed story: {headline_text}")
     
