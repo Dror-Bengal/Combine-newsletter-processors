@@ -97,7 +97,7 @@ def extract_content_blocks(soup):
         paragraphs = section.find_all('p')
         content = "\n\n".join([p.get_text(strip=True) for p in paragraphs])
         
-        if not content.strip():
+        if not content.strip() and not headline_text.strip():
             continue
         
         links = section.find_all('a', href=True)
@@ -117,17 +117,39 @@ def extract_content_blocks(soup):
         processed_block = process_content_block(block)
         if processed_block['block_type'] != 'removed':
             content_blocks.append(processed_block)
-        logger.debug(f"Processed story: {headline_text}")
+        logger.debug(f"Processed story: {headline_text[:50]}...")
     
     translate_content_blocks(content_blocks)
     return content_blocks
 
 def translate_content_blocks(blocks):
     for block in blocks:
-        combined_text = f"{block['title']}\n{block['body_text']}"
-        translated_text = cached_translate(combined_text)
-        translated_title, translated_body = translated_text.split('\n', 1)
-        block['translated_title'] = translated_title
-        block['translated_body_text'] = translated_body
+        try:
+            title = block.get('title', '').strip()
+            body = block.get('body_text', '').strip()
+            
+            if title and body:
+                combined_text = f"{title}\n{body}"
+                translated_text = cached_translate(combined_text)
+                try:
+                    translated_title, translated_body = translated_text.split('\n', 1)
+                    block['translated_title'] = translated_title
+                    block['translated_body_text'] = translated_body
+                except ValueError:
+                    logger.warning(f"Could not split translated text for block: {title[:30]}...")
+                    block['translated_title'] = translated_text
+                    block['translated_body_text'] = ''
+            elif title:
+                block['translated_title'] = cached_translate(title)
+                block['translated_body_text'] = ''
+            elif body:
+                block['translated_title'] = ''
+                block['translated_body_text'] = cached_translate(body)
+            else:
+                logger.warning(f"Empty content block found: {block}")
+        except Exception as e:
+            logger.error(f"Error translating block: {e}")
+            block['translated_title'] = block.get('title', '')
+            block['translated_body_text'] = block.get('body_text', '')
 
 # No Flask app or route decorators in this file
