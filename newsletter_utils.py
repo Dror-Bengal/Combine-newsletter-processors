@@ -1,15 +1,8 @@
 import re
 from typing import List, Dict
 import json
-from textblob import TextBlob
-
-try:
-    import spacy
-    nlp = spacy.load("en_core_web_sm")
-    SPACY_AVAILABLE = True
-except (ImportError, OSError):
-    SPACY_AVAILABLE = False
-    print("SpaCy model not available. Falling back to simpler implementation.")
+from collections import Counter
+import html2text
 
 # Load categories and advertising keywords from a JSON file
 with open('newsletter_config.json', 'r') as config_file:
@@ -49,7 +42,7 @@ def calculate_score(content_block: Dict) -> int:
     # Normalize score to 0-100 range
     return min(score, 100)
 
-def is_advertisement(content_block: Dict) -> bool:
+def is_advertisement(content_block):
     text = content_block.get('body_text', '').lower()
     title = content_block.get('title', '').lower()
     
@@ -58,66 +51,43 @@ def is_advertisement(content_block: Dict) -> bool:
         if keyword.lower() in text or keyword.lower() in title:
             return True
     
-    # Check for promotional language
-    promo_phrases = ['sign up', 'get % off', 'limited time offer', 'click here', 'special offer']
-    if any(phrase in text for phrase in promo_phrases):
-        return True
+    # Check for promotional language patterns
+    promo_patterns = [
+        r"\d+% off",
+        r"sign up and get",
+        r"how it's done:",
+        r"answer a few questions",
+        r"get matched",
+        r"connect with .+ therapists?",
+        r"helping millions",
+        r"lead happier, healthier lives",
+        r"in as little as \d+ hours",
+    ]
+    
+    for pattern in promo_patterns:
+        if re.search(pattern, text, re.IGNORECASE) or re.search(pattern, title, re.IGNORECASE):
+            return True
     
     return False
 
-def determine_categories(content_block: Dict) -> List[str]:
+def determine_categories(content_block: Dict, num_categories=3) -> List[str]:
     text = content_block.get('body_text', '').lower()
     title = content_block.get('title', '').lower()
     
-    relevant_categories = []
-    for category, keywords in CATEGORIES.items():
-        category_score = sum(1 for keyword in keywords if keyword.lower() in text or keyword.lower() in title)
-        if category_score > 0:
-            relevant_categories.append((category, category_score))
+    # Combine title and body text
+    full_text = f"{title} {text}"
     
-    # Sort categories by relevance score and return top 3
-    return [cat for cat, score in sorted(relevant_categories, key=lambda x: x[1], reverse=True)[:3]]
-
-def analyze_sentiment(text: str) -> str:
-    blob = TextBlob(text)
-    sentiment_score = blob.sentiment.polarity
-    if sentiment_score > 0.1:
-        return "positive"
-    elif sentiment_score < -0.1:
-        return "negative"
-    else:
-        return "neutral"
-
-def extract_entities(text: str) -> Dict[str, List[str]]:
-    if SPACY_AVAILABLE:
-        doc = nlp(text)
-        entities = {
-            "persons": [],
-            "organizations": [],
-            "locations": [],
-            "events": []
-        }
-        
-        for ent in doc.ents:
-            if ent.label_ == "PERSON" and len(ent.text.split()) > 1:  # Ensure full names
-                entities["persons"].append(ent.text)
-            elif ent.label_ == "ORG":
-                entities["organizations"].append(ent.text)
-            elif ent.label_ == "GPE":
-                entities["locations"].append(ent.text)
-            elif ent.label_ == "EVENT":
-                entities["events"].append(ent.text)
-        
-        return {k: list(set(v)) for k, v in entities.items()}  # Remove duplicates
-    else:
-        # Simple fallback using regex
-        entities = {
-            "persons": list(set(re.findall(r'\b[A-Z][a-z]+ [A-Z][a-z]+\b', text))),
-            "organizations": [],
-            "locations": [],
-            "events": []
-        }
-        return entities
+    # Count occurrences of each category in the text
+    category_counts = Counter()
+    for category in CATEGORIES:
+        count = full_text.count(category.lower())
+        if count > 0:
+            category_counts[category] = count
+    
+    # Get the top categories
+    top_categories = [category for category, _ in category_counts.most_common(num_categories)]
+    
+    return top_categories
 
 def process_content_block(content_block: Dict) -> Dict:
     if is_advertisement(content_block):
@@ -129,19 +99,16 @@ def process_content_block(content_block: Dict) -> Dict:
     processed_block = {
         "block_type": content_block.get('block_type', 'article'),
         "title": content_block.get('title', ''),
+        "translated_title": content_block.get('translated_title', ''),
         "body_text": content_block.get('body_text', ''),
         "translated_body_text": content_block.get('translated_body_text', ''),
         "image_url": content_block.get('image_url', ''),
         "link_url": content_block.get('link_url', ''),
         "score": calculate_score(content_block),
-        "categories": determine_categories(content_block),
-        "sentiment": analyze_sentiment(content_block.get('body_text', '')),
-        "entities": extract_entities(content_block.get('body_text', ''))
+        "categories": determine_categories(content_block)
     }
     
     return processed_block
-
-# Additional utility functions
 
 def clean_text(text: str) -> str:
     """Remove special characters and extra whitespace from text."""
@@ -187,11 +154,16 @@ def process_newsletter(content_blocks: List[Dict]) -> Dict:
         "total_blocks": len(content_blocks),
         "non_ad_blocks": len(non_ad_blocks),
         "average_score": sum(block['score'] for block in non_ad_blocks) / len(non_ad_blocks) if non_ad_blocks else 0,
-        "total_word_count": sum(get_word_count(block['body_text']) for block in non_ad_blocks),
-        "overall_sentiment": analyze_sentiment(' '.join(block['body_text'] for block in non_ad_blocks))
+        "total_word_count": sum(get_word_count(block['body_text']) for block in non_ad_blocks)
     }
     
     return {
         "content_blocks": non_ad_blocks,
         "overall_stats": overall_stats
     }
+
+def html_to_text(html_content: str) -> str:
+    """Convert HTML content to plain text."""
+    h = html2text.HTML2Text()
+    h.ignore_links = False
+    return h.handle(html_content)
