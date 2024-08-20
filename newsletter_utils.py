@@ -1,11 +1,15 @@
 import re
 from typing import List, Dict
 import json
-import spacy
 from textblob import TextBlob
 
-# Load spaCy model
-nlp = spacy.load("en_core_web_sm")
+try:
+    import spacy
+    nlp = spacy.load("en_core_web_sm")
+    SPACY_AVAILABLE = True
+except (ImportError, OSError):
+    SPACY_AVAILABLE = False
+    print("SpaCy model not available. Falling back to simpler implementation.")
 
 # Load categories and advertising keywords from a JSON file
 with open('newsletter_config.json', 'r') as config_file:
@@ -59,11 +63,9 @@ def determine_categories(content_block: Dict) -> List[str]:
     text = content_block.get('body_text', '').lower()
     title = content_block.get('title', '').lower()
     
-    doc = nlp(text + " " + title)
-    
     relevant_categories = []
     for category, keywords in CATEGORIES.items():
-        category_score = sum(1 for keyword in keywords if keyword.lower() in doc.text)
+        category_score = sum(1 for keyword in keywords if keyword.lower() in text or keyword.lower() in title)
         if category_score > 0:
             relevant_categories.append((category, category_score))
     
@@ -81,25 +83,35 @@ def analyze_sentiment(text: str) -> str:
         return "neutral"
 
 def extract_entities(text: str) -> Dict[str, List[str]]:
-    doc = nlp(text)
-    entities = {
-        "persons": [],
-        "organizations": [],
-        "locations": [],
-        "events": []
-    }
-    
-    for ent in doc.ents:
-        if ent.label_ == "PERSON":
-            entities["persons"].append(ent.text)
-        elif ent.label_ == "ORG":
-            entities["organizations"].append(ent.text)
-        elif ent.label_ == "GPE":
-            entities["locations"].append(ent.text)
-        elif ent.label_ == "EVENT":
-            entities["events"].append(ent.text)
-    
-    return entities
+    if SPACY_AVAILABLE:
+        doc = nlp(text)
+        entities = {
+            "persons": [],
+            "organizations": [],
+            "locations": [],
+            "events": []
+        }
+        
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                entities["persons"].append(ent.text)
+            elif ent.label_ == "ORG":
+                entities["organizations"].append(ent.text)
+            elif ent.label_ == "GPE":
+                entities["locations"].append(ent.text)
+            elif ent.label_ == "EVENT":
+                entities["events"].append(ent.text)
+        
+        return entities
+    else:
+        # Simple fallback using regex
+        entities = {
+            "persons": re.findall(r'\b[A-Z][a-z]+ [A-Z][a-z]+\b', text),
+            "organizations": [],
+            "locations": [],
+            "events": []
+        }
+        return entities
 
 def process_content_block(content_block: Dict) -> Dict:
     if is_advertisement(content_block):
