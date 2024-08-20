@@ -3,12 +3,18 @@ from typing import List, Dict
 import json
 from collections import Counter
 import html2text
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Load categories and advertising keywords from a JSON file
 with open('newsletter_config.json', 'r') as config_file:
     config = json.load(config_file)
     CATEGORIES = config['categories']
     AD_KEYWORDS = config['ad_keywords']
+
+logger.debug(f"Loaded categories: {CATEGORIES}")
 
 def calculate_score(content_block: Dict) -> int:
     score = 0
@@ -77,15 +83,21 @@ def determine_categories(content_block: Dict, num_categories=3) -> List[str]:
     # Combine title and body text
     full_text = f"{title} {text}"
     
+    logger.debug(f"Determining categories for text: {full_text[:100]}...")  # Log first 100 characters
+    
     # Count occurrences of each category in the text
     category_counts = Counter()
     for category in CATEGORIES:
-        count = full_text.count(category.lower())
+        count = sum(1 for word in category.lower().split() if word in full_text)
         if count > 0:
             category_counts[category] = count
     
+    logger.debug(f"Category counts: {dict(category_counts)}")
+    
     # Get the top categories
     top_categories = [category for category, _ in category_counts.most_common(num_categories)]
+    
+    logger.debug(f"Top categories: {top_categories}")
     
     return top_categories
 
@@ -96,6 +108,9 @@ def process_content_block(content_block: Dict) -> Dict:
             "reason": "Content block removed due to advertisement content"
         }
     
+    categories = determine_categories(content_block)
+    logger.debug(f"Categories determined for block: {categories}")
+    
     processed_block = {
         "block_type": content_block.get('block_type', 'article'),
         "title": content_block.get('title', ''),
@@ -105,7 +120,7 @@ def process_content_block(content_block: Dict) -> Dict:
         "image_url": content_block.get('image_url', ''),
         "link_url": content_block.get('link_url', ''),
         "score": calculate_score(content_block),
-        "categories": determine_categories(content_block)
+        "categories": categories
     }
     
     return processed_block
@@ -149,6 +164,9 @@ def process_newsletter(content_blocks: List[Dict]) -> Dict:
     """Process the entire newsletter, including overall statistics."""
     processed_blocks = [process_content_block(block) for block in content_blocks]
     non_ad_blocks = [block for block in processed_blocks if block['block_type'] != 'removed']
+    
+    for block in non_ad_blocks:
+        logger.debug(f"Processed block: {block['title']}, Categories: {block['categories']}")
     
     overall_stats = {
         "total_blocks": len(content_blocks),
