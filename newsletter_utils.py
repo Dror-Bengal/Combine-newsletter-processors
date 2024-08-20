@@ -1,6 +1,11 @@
 import re
 from typing import List, Dict
 import json
+import spacy
+from textblob import TextBlob
+
+# Load spaCy model
+nlp = spacy.load("en_core_web_sm")
 
 # Load categories and advertising keywords from a JSON file
 with open('newsletter_config.json', 'r') as config_file:
@@ -23,9 +28,19 @@ def calculate_score(content_block: Dict) -> int:
     if content_block.get('link_url'):
         score += 5
     
-    # Score based on category relevance (implement later)
+    # Score based on category relevance
     categories = determine_categories(content_block)
     score += len(categories) * 5  # 5 points per relevant category
+    
+    # Score for presence of data (numbers, percentages)
+    data_pattern = r'\d+%|\d+\.\d+|\b\d+\b'
+    data_matches = re.findall(data_pattern, content_block.get('body_text', ''))
+    score += min(len(data_matches) * 2, 10)  # Max 10 points for data
+    
+    # Score for presence of quotes
+    quote_pattern = r'"[^"]*"'
+    quote_matches = re.findall(quote_pattern, content_block.get('body_text', ''))
+    score += min(len(quote_matches) * 3, 15)  # Max 15 points for quotes
     
     # Normalize score to 0-100 range
     return min(score, 100)
@@ -44,18 +59,58 @@ def determine_categories(content_block: Dict) -> List[str]:
     text = content_block.get('body_text', '').lower()
     title = content_block.get('title', '').lower()
     
+    doc = nlp(text + " " + title)
+    
     relevant_categories = []
     for category, keywords in CATEGORIES.items():
-        if any(keyword.lower() in text or keyword.lower() in title for keyword in keywords):
-            relevant_categories.append(category)
+        category_score = sum(1 for keyword in keywords if keyword.lower() in doc.text)
+        if category_score > 0:
+            relevant_categories.append((category, category_score))
     
-    return relevant_categories[:3]  # Return top 3 categories
+    # Sort categories by relevance score and return top 3
+    return [cat for cat, score in sorted(relevant_categories, key=lambda x: x[1], reverse=True)[:3]]
+
+def analyze_sentiment(text: str) -> str:
+    blob = TextBlob(text)
+    sentiment_score = blob.sentiment.polarity
+    if sentiment_score > 0.1:
+        return "positive"
+    elif sentiment_score < -0.1:
+        return "negative"
+    else:
+        return "neutral"
+
+def extract_entities(text: str) -> Dict[str, List[str]]:
+    doc = nlp(text)
+    entities = {
+        "persons": [],
+        "organizations": [],
+        "locations": [],
+        "events": []
+    }
+    
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            entities["persons"].append(ent.text)
+        elif ent.label_ == "ORG":
+            entities["organizations"].append(ent.text)
+        elif ent.label_ == "GPE":
+            entities["locations"].append(ent.text)
+        elif ent.label_ == "EVENT":
+            entities["events"].append(ent.text)
+    
+    return entities
 
 def process_content_block(content_block: Dict) -> Dict:
     if is_advertisement(content_block):
-        return None  # Filter out advertisements
+        return {
+            "block_type": "removed",
+            "reason": "Content block removed due to advertisement content"
+        }
     
     content_block['score'] = calculate_score(content_block)
     content_block['categories'] = determine_categories(content_block)
+    content_block['sentiment'] = analyze_sentiment(content_block.get('body_text', ''))
+    content_block['entities'] = extract_entities(content_block.get('body_text', ''))
     
     return content_block
