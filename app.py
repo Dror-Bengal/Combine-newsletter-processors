@@ -27,6 +27,10 @@ redis_url = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379')
 logger.debug(f"Using Redis URL: {redis_url}")
 
 celery = Celery('tasks', broker=redis_url, backend=redis_url)
+celery.conf.update(
+    task_time_limit=600,  # 10 minutes
+    task_soft_time_limit=540,  # 9 minutes
+)
 @app.route('/')
 def home():
     return jsonify({"message": "Newsletter Processor API"}), 200
