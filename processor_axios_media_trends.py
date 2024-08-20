@@ -6,9 +6,14 @@ import logging
 import json
 import html2text
 from newsletter_utils import process_content_block
+from functools import lru_cache
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+@lru_cache(maxsize=1000)
+def cached_translate(text):
+    return translate_text(text)
 
 def create_base_output_structure(metadata):
     return {
@@ -19,17 +24,10 @@ def create_base_output_structure(metadata):
             "date_sent": metadata.get('date', ''),
             "subject": metadata.get('subject', ''),
             "email_id": metadata.get('message-id', ''),
-            "translated_subject": translate_text(metadata.get('subject', ''))
+            "translated_subject": cached_translate(metadata.get('subject', ''))
         },
         "content": {
-            "main_content_html": metadata['content']['html'],
-            "main_content_text": "",
-            "translated_main_content_text": "",
             "content_blocks": []
-        },
-        "additional_info": {
-            "attachments": [],
-            "engagement_metrics": {}
         },
         "translation_info": {
             "translated_language": "he",
@@ -58,16 +56,10 @@ def process_axios_media_trends(data):
         soup = BeautifulSoup(content_html, 'html.parser')
         logger.debug(f"BeautifulSoup object created. Number of tags: {len(soup.find_all())}")
 
-        h = html2text.HTML2Text()
-        h.ignore_links = False
-        output_json['content']['main_content_text'] = h.handle(content_html)
-        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
-
         content_blocks = extract_content_blocks(soup)
-        processed_blocks = [block for block in content_blocks if block is not None]
-        output_json['content']['content_blocks'] = processed_blocks
+        output_json['content']['content_blocks'] = content_blocks
         
-        logger.debug(f"Number of content blocks extracted: {len(processed_blocks)}")
+        logger.debug(f"Number of content blocks extracted: {len(content_blocks)}")
         
         logger.debug(f"Processed output: {json.dumps(output_json, indent=2)}")
         return output_json, 200
@@ -118,7 +110,6 @@ def extract_content_blocks(soup):
             "block_type": "article",
             "title": headline_text,
             "body_text": content,
-            "translated_body_text": translate_text(content),
             "image_url": image_url,
             "link_url": link,
         }
@@ -128,6 +119,15 @@ def extract_content_blocks(soup):
             content_blocks.append(processed_block)
         logger.debug(f"Processed story: {headline_text}")
     
+    translate_content_blocks(content_blocks)
     return content_blocks
+
+def translate_content_blocks(blocks):
+    for block in blocks:
+        combined_text = f"{block['title']}\n{block['body_text']}"
+        translated_text = cached_translate(combined_text)
+        translated_title, translated_body = translated_text.split('\n', 1)
+        block['translated_title'] = translated_title
+        block['translated_body_text'] = translated_body
 
 # No Flask app or route decorators in this file
