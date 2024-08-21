@@ -5,7 +5,7 @@ from translator import translate_text
 import logging
 import json
 import html2text
-from newsletter_utils import process_content_block
+from newsletter_utils import process_content_block, determine_categories
 from functools import lru_cache
 
 logging.basicConfig(level=logging.DEBUG)
@@ -108,7 +108,7 @@ def extract_content_blocks(soup):
         
         block = {
             "block_type": "article",
-            "title": headline_text,
+            "title": headline_text or "Untitled",  # Use "Untitled" if no title is found
             "body_text": content,
             "image_url": image_url,
             "link_url": link,
@@ -116,6 +116,9 @@ def extract_content_blocks(soup):
         
         processed_block = process_content_block(block)
         if processed_block['block_type'] != 'removed':
+            # Ensure categories are assigned even if the utility function didn't do it
+            if not processed_block.get('categories'):
+                processed_block['categories'] = determine_categories(processed_block)
             content_blocks.append(processed_block)
         logger.debug(f"Processed story: {headline_text[:50]}...")
     
