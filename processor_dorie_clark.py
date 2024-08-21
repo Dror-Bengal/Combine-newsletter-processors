@@ -2,9 +2,15 @@ import logging
 from bs4 import BeautifulSoup
 from translator import translate_text
 import html2text
+from newsletter_utils import process_content_block, determine_categories
+from functools import lru_cache
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+@lru_cache(maxsize=1000)
+def cached_translate(text):
+    return translate_text(text)
 
 def create_base_output_structure(metadata):
     return {
@@ -15,17 +21,10 @@ def create_base_output_structure(metadata):
             "date_sent": metadata.get('date', ''),
             "subject": metadata.get('subject', ''),
             "email_id": metadata.get('message-id', ''),
-            "translated_subject": translate_text(metadata.get('subject', ''))
+            "translated_subject": cached_translate(metadata.get('subject', ''))
         },
         "content": {
-            "main_content_html": metadata['content']['html'],
-            "main_content_text": "",
-            "translated_main_content_text": "",
             "content_blocks": []
-        },
-        "additional_info": {
-            "attachments": [],
-            "engagement_metrics": {}
         },
         "translation_info": {
             "translated_language": "he",
@@ -34,43 +33,52 @@ def create_base_output_structure(metadata):
     }
 
 def process_email(data):
+    logger.debug("Starting to process Dorie Clark newsletter")
     try:
         if 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
+            logger.error("Invalid JSON structure in input data")
             return {"error": "Invalid JSON structure"}, 400
 
         content_html = data['metadata']['content']['html']
         metadata = data['metadata']
         
+        if not is_dorie_clark_newsletter(metadata):
+            logger.info("Email is not from Dorie Clark")
+            return {"error": "Not a Dorie Clark newsletter"}, 400
+        
         output_json = create_base_output_structure(metadata)
         
+        logger.debug(f"Content HTML length: {len(content_html)}")
+        
         soup = BeautifulSoup(content_html, 'html.parser')
-
-        # Convert HTML to plain text
-        h = html2text.HTML2Text()
-        h.ignore_links = False
-        output_json['content']['main_content_text'] = h.handle(content_html)
-        output_json['content']['translated_main_content_text'] = translate_text(output_json['content']['main_content_text'])
+        logger.debug(f"BeautifulSoup object created. Number of tags: {len(soup.find_all())}")
 
         content_blocks = extract_content_blocks(soup)
         output_json['content']['content_blocks'] = content_blocks
         
-        logger.debug(f"Extracted content blocks: {len(content_blocks)}")
+        logger.debug(f"Number of content blocks extracted: {len(content_blocks)}")
+        
+        logger.debug(f"Processed output: {output_json}")
         return output_json, 200
 
     except Exception as e:
-        logger.error(f"Error in process_email: {str(e)}")
+        logger.exception("Unexpected error in process_email")
         return {"error": str(e)}, 500
+
+def is_dorie_clark_newsletter(metadata):
+    sender = metadata.get('sender', '').lower()
+    sender_name = metadata.get('Sender name', '').lower()
+    
+    is_correct_sender = 'dorie@dorieclark.com' in sender
+    is_correct_name = 'dorie clark' in sender_name
+    
+    logger.debug(f"Sender check: {is_correct_sender}, Name check: {is_correct_name}")
+    
+    return is_correct_sender and is_correct_name
 
 def extract_content_blocks(soup):
     content_blocks = []
     
-    main_content = extract_main_content(soup)
-    if main_content:
-        content_blocks.append(main_content)
-    
-    return content_blocks
-
-def extract_main_content(soup):
     main_content_div = soup.find('div', class_='message-content')
     if main_content_div:
         content = []
@@ -98,42 +106,54 @@ def extract_main_content(soup):
         
         text = '\n\n'.join(content)
         
-        logger.debug(f"Extracted main content: {text[:200]}...")  # Log first 200 characters
-        
-        return {
-            "block_type": "newsletter_content",
-            "title": "Dorie Clark's Insights",  # You might want to extract a more specific title if available
-            "translated_title": translate_text("Dorie Clark's Insights"),
-            "description": text[:200] + "..." if len(text) > 200 else text,
-            "translated_description": translate_text(text[:200] + "..." if len(text) > 200 else text),
+        block = {
+            "block_type": "article",
+            "title": "Dorie Clark's Insights",
             "body_text": text,
-            "translated_body_text": translate_text(text),
             "image_url": "",
             "link_url": "",
-            "category": "Newsletter",
-            "subcategory": determine_subcategory(text),
-            "social_trend": generate_social_trend(text),
-            "translated_social_trend": translate_text(generate_social_trend(text))
         }
-    return None
-
-def determine_subcategory(text):
-    categories = {
-        'Career Advice': ['career', 'job', 'work'],
-        'Personal Branding': ['brand', 'personal brand', 'reputation'],
-        'Leadership': ['lead', 'leadership', 'manage'],
-        'Entrepreneurship': ['entrepreneur', 'startup', 'business'],
-        'Networking': ['network', 'connection', 'relationship'],
-        'Productivity': ['productivity', 'efficiency', 'time management']
-    }
+        
+        processed_block = process_content_block(block)
+        if processed_block['block_type'] != 'removed':
+            # Ensure categories are assigned even if the utility function didn't do it
+            if not processed_block.get('categories'):
+                processed_block['categories'] = determine_categories(processed_block)
+            content_blocks.append(processed_block)
+        
+        logger.debug(f"Processed main content: {text[:200]}...")  # Log first 200 characters
     
-    for category, keywords in categories.items():
-        if any(keyword.lower() in text.lower() for keyword in keywords):
-            return category
-    return "General Insights"
+    translate_content_blocks(content_blocks)
+    return content_blocks
 
-def generate_social_trend(text):
-    words = text.split()[:2]  # Use first two words of the content
-    return f"#{''.join(words)}" if len(words) > 1 else "#DorieClarkInsights"
+def translate_content_blocks(blocks):
+    for block in blocks:
+        try:
+            title = block.get('title', '').strip()
+            body = block.get('body_text', '').strip()
+            
+            if title and body:
+                combined_text = f"{title}\n{body}"
+                translated_text = cached_translate(combined_text)
+                try:
+                    translated_title, translated_body = translated_text.split('\n', 1)
+                    block['translated_title'] = translated_title
+                    block['translated_body_text'] = translated_body
+                except ValueError:
+                    logger.warning(f"Could not split translated text for block: {title[:30]}...")
+                    block['translated_title'] = translated_text
+                    block['translated_body_text'] = ''
+            elif title:
+                block['translated_title'] = cached_translate(title)
+                block['translated_body_text'] = ''
+            elif body:
+                block['translated_title'] = ''
+                block['translated_body_text'] = cached_translate(body)
+            else:
+                logger.warning(f"Empty content block found: {block}")
+        except Exception as e:
+            logger.error(f"Error translating block: {e}")
+            block['translated_title'] = block.get('title', '')
+            block['translated_body_text'] = block.get('body_text', '')
 
 # No Flask app or route decorators in this file
