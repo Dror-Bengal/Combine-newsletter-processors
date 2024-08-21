@@ -91,6 +91,9 @@ def extract_content_block(soup):
 
         main_content = content_container.get_text(strip=True)
 
+        # Add context to help with category determination
+        contextualized_content = f"Simon Sinek's inspirational note on leadership and personal growth: {main_content}"
+
         block = {
             "block_type": "article",
             "title": "Simon Sinek's Note to Inspire",
@@ -101,7 +104,8 @@ def extract_content_block(soup):
         
         processed_block = process_content_block(block)
         if processed_block['block_type'] != 'removed':
-            processed_block['categories'] = determine_categories(processed_block)
+            categories = determine_categories({"body_text": contextualized_content})
+            processed_block['categories'] = categories if categories else ["Leadership", "Personal Development"]
             processed_block['translated_title'] = cached_translate(processed_block['title'])
             processed_block['translated_body_text'] = cached_translate(processed_block['body_text'])
             processed_block['score'] = calculate_score(processed_block)
@@ -118,7 +122,7 @@ def calculate_score(block):
     
     # Score based on content length
     text_length = len(block.get('body_text', ''))
-    score += min(text_length // 10, 50)  # Max 50 points for length
+    score += min(text_length // 5, 50)  # Max 50 points for length
     
     # Score for presence of categories
     score += len(block.get('categories', [])) * 10  # 10 points per category
