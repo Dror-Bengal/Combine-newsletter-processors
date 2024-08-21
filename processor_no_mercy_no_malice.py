@@ -91,8 +91,10 @@ def extract_content_block(soup):
         main_content = re.sub(r'\nP\.S\..+', '', main_content, flags=re.DOTALL)
         main_content = re.sub(r'\nP\.P\.S\..+', '', main_content, flags=re.DOTALL)
 
-        # Extract title from the first paragraph or use a default
-        title = paragraphs[0].get_text(strip=True)[:100] if paragraphs else "No Mercy No Malice Insights"
+        # Extract a more meaningful title
+        title = main_content.split('.')[0][:150]  # First sentence, up to 150 characters
+        if len(title) < 50 and len(main_content.split('.')) > 1:
+            title += '. ' + main_content.split('.')[1][:100]  # Add second sentence if first is too short
 
         block = {
             "block_type": "article",
@@ -106,7 +108,8 @@ def extract_content_block(soup):
         if processed_block['block_type'] != 'removed':
             processed_block['categories'] = determine_categories(processed_block)
             processed_block['translated_title'] = cached_translate(processed_block['title'])
-            processed_block['translated_body_text'] = cached_translate(processed_block['body_text'])
+            processed_block['translated_body_text'] = translate_long_text(processed_block['body_text'])
+            processed_block['score'] = calculate_score(processed_block)
         
         logger.debug(f"Processed content block: {processed_block}")
         return processed_block
@@ -114,5 +117,23 @@ def extract_content_block(soup):
     except Exception as e:
         logger.error(f"Error extracting content: {str(e)}")
         return None
+
+def translate_long_text(text, max_chunk_size=5000):
+    chunks = [text[i:i+max_chunk_size] for i in range(0, len(text), max_chunk_size)]
+    translated_chunks = [cached_translate(chunk) for chunk in chunks]
+    return ' '.join(translated_chunks)
+
+def calculate_score(block):
+    score = 0
+    
+    # Score based on content length
+    text_length = len(block.get('body_text', ''))
+    score += min(text_length // 100, 50)  # Max 50 points for length
+    
+    # Score for presence of categories
+    score += len(block.get('categories', [])) * 10  # 10 points per category
+    
+    # Normalize score to 0-100 range
+    return min(score, 100)
 
 # No Flask app or route decorators in this file
