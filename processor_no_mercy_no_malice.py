@@ -92,11 +92,11 @@ def extract_content_block(soup):
         main_content = re.sub(r'\nP\.P\.S\..+', '', main_content, flags=re.DOTALL)
 
         # Extract title from the first paragraph or use a default
-        title = paragraphs[0].get_text(strip=True) if paragraphs else "No Mercy No Malice Insights"
+        title = paragraphs[0].get_text(strip=True)[:100] if paragraphs else "No Mercy No Malice Insights"
 
         block = {
             "block_type": "article",
-            "title": title[:100],  # Limit title to 100 characters
+            "title": title,
             "body_text": main_content,
             "image_url": "",
             "link_url": "",
