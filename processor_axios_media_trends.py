@@ -131,25 +131,17 @@ def translate_content_blocks(blocks):
             title = block.get('title', '').strip()
             body = block.get('body_text', '').strip()
             
-            if title and body:
-                combined_text = f"{title}\n{body}"
-                translated_text = cached_translate(combined_text)
-                try:
-                    translated_title, translated_body = translated_text.split('\n', 1)
-                    block['translated_title'] = translated_title
-                    block['translated_body_text'] = translated_body
-                except ValueError:
-                    logger.warning(f"Could not split translated text for block: {title[:30]}...")
-                    block['translated_title'] = translated_text
-                    block['translated_body_text'] = ''
-            elif title:
+            if title:
                 block['translated_title'] = cached_translate(title)
-                block['translated_body_text'] = ''
-            elif body:
+            else:
                 block['translated_title'] = ''
+            
+            if body:
                 block['translated_body_text'] = cached_translate(body)
             else:
-                logger.warning(f"Empty content block found: {block}")
+                block['translated_body_text'] = ''
+            
+            logger.debug(f"Translated block - Title: {block['translated_title'][:30]}..., Body: {block['translated_body_text'][:30]}...")
         except Exception as e:
             logger.error(f"Error translating block: {e}")
             block['translated_title'] = block.get('title', '')
