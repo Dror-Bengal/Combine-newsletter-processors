@@ -53,9 +53,9 @@ def process_email(data):
         soup = BeautifulSoup(content_html, 'html.parser')
         logger.debug(f"BeautifulSoup object created. Number of tags: {len(soup.find_all())}")
 
-        content_block = extract_content_block(soup)
-        if content_block:
-            output_json['content']['content_blocks'] = [content_block]
+        content_blocks = extract_content_blocks(soup)
+        if content_blocks:
+            output_json['content']['content_blocks'] = content_blocks
             logger.debug(f"Processed output: {output_json}")
             return output_json, 200
         else:
@@ -77,29 +77,38 @@ def is_no_mercy_no_malice_email(metadata):
     
     return is_correct_sender and is_correct_name
 
-def extract_content_block(soup):
-    logger.debug("Extracting content block")
+def extract_content_blocks(soup):
+    logger.debug("Extracting content blocks")
     try:
-        content_container = soup.find('tr', id='content-blocks')
-        if not content_container:
+        content_blocks = []
+        main_content = soup.find('tr', id='content-blocks')
+        
+        if not main_content:
             logger.warning("Main content container not found")
             return None
 
-        paragraphs = content_container.find_all('p')
-        main_content = "\n\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
+        # Find all content sections
+        content_sections = main_content.find_all('td', class_='dd')
+        
+        full_content = ""
+        for section in content_sections:
+            # Extract text from paragraphs and headers
+            elements = section.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            section_content = "\n\n".join([elem.get_text(strip=True) for elem in elements if elem.get_text(strip=True)])
+            full_content += section_content + "\n\n"
 
-        main_content = re.sub(r'\nP\.S\..+', '', main_content, flags=re.DOTALL)
-        main_content = re.sub(r'\nP\.P\.S\..+', '', main_content, flags=re.DOTALL)
+        # Remove any unwanted footer content
+        full_content = re.sub(r'\nP\.S\..+', '', full_content, flags=re.DOTALL)
+        full_content = re.sub(r'\nP\.P\.S\..+', '', full_content, flags=re.DOTALL)
 
-        # Extract a more meaningful title
-        title = main_content.split('.')[0][:150]  # First sentence, up to 150 characters
-        if len(title) < 50 and len(main_content.split('.')) > 1:
-            title += '. ' + main_content.split('.')[1][:100]  # Add second sentence if first is too short
+        # Extract title (use the first non-empty line as title)
+        title_match = re.search(r'^(.+)$', full_content, re.MULTILINE)
+        title = title_match.group(1) if title_match else "No Mercy No Malice Insights"
 
         block = {
             "block_type": "article",
-            "title": title,
-            "body_text": main_content,
+            "title": title[:100],  # Limit title to 100 characters
+            "body_text": full_content.strip(),
             "image_url": "",
             "link_url": "",
         }
@@ -110,9 +119,10 @@ def extract_content_block(soup):
             processed_block['translated_title'] = cached_translate(processed_block['title'])
             processed_block['translated_body_text'] = translate_long_text(processed_block['body_text'])
             processed_block['score'] = calculate_score(processed_block)
+            content_blocks.append(processed_block)
         
-        logger.debug(f"Processed content block: {processed_block}")
-        return processed_block
+        logger.debug(f"Extracted {len(content_blocks)} content blocks")
+        return content_blocks
 
     except Exception as e:
         logger.error(f"Error extracting content: {str(e)}")
