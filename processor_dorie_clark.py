@@ -1,7 +1,6 @@
 import logging
 from bs4 import BeautifulSoup
 from translator import translate_text
-import html2text
 from newsletter_utils import process_content_block, determine_categories
 from functools import lru_cache
 
@@ -116,44 +115,13 @@ def extract_content_blocks(soup):
         
         processed_block = process_content_block(block)
         if processed_block['block_type'] != 'removed':
-            # Ensure categories are assigned even if the utility function didn't do it
-            if not processed_block.get('categories'):
-                processed_block['categories'] = determine_categories(processed_block)
+            processed_block['categories'] = determine_categories(processed_block)
+            processed_block['translated_title'] = cached_translate(processed_block['title'])
+            processed_block['translated_body_text'] = cached_translate(processed_block['body_text'])
             content_blocks.append(processed_block)
         
         logger.debug(f"Processed main content: {text[:200]}...")  # Log first 200 characters
     
-    translate_content_blocks(content_blocks)
     return content_blocks
-
-def translate_content_blocks(blocks):
-    for block in blocks:
-        try:
-            title = block.get('title', '').strip()
-            body = block.get('body_text', '').strip()
-            
-            if title and body:
-                combined_text = f"{title}\n{body}"
-                translated_text = cached_translate(combined_text)
-                try:
-                    translated_title, translated_body = translated_text.split('\n', 1)
-                    block['translated_title'] = translated_title
-                    block['translated_body_text'] = translated_body
-                except ValueError:
-                    logger.warning(f"Could not split translated text for block: {title[:30]}...")
-                    block['translated_title'] = translated_text
-                    block['translated_body_text'] = ''
-            elif title:
-                block['translated_title'] = cached_translate(title)
-                block['translated_body_text'] = ''
-            elif body:
-                block['translated_title'] = ''
-                block['translated_body_text'] = cached_translate(body)
-            else:
-                logger.warning(f"Empty content block found: {block}")
-        except Exception as e:
-            logger.error(f"Error translating block: {e}")
-            block['translated_title'] = block.get('title', '')
-            block['translated_body_text'] = block.get('body_text', '')
 
 # No Flask app or route decorators in this file
