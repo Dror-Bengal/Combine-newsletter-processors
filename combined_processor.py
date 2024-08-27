@@ -144,11 +144,11 @@ def process_no_mercy_no_malice(data):
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "No Mercy No Malice")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_blocks = extract_no_mercy_no_malice_content(soup)
     output_json['content']['content_blocks'] = content_blocks
-    
+
     return output_json, 200
 
 def extract_no_mercy_no_malice_content(soup):
@@ -158,7 +158,7 @@ def extract_no_mercy_no_malice_content(soup):
     if main_content:
         content_sections = main_content.find_all('td', class_='dd')
         full_content = "\n\n".join([section.get_text(strip=True) for section in content_sections])
-        
+
         # Remove footer content
         full_content = re.sub(r'\nP\.S\..+', '', full_content, flags=re.DOTALL)
         full_content = re.sub(r'\nP\.P\.S\..+', '', full_content, flags=re.DOTALL)
@@ -167,12 +167,20 @@ def extract_no_mercy_no_malice_content(soup):
         title_match = re.search(r'^(.+)$', full_content, re.MULTILINE)
         title = title_match.group(1) if title_match else "No Mercy No Malice Insights"
 
+        # Extract image URL
+        image = main_content.find('img')
+        image_url = image['src'] if image else ""
+
+        # Extract link URL
+        link = main_content.find('a', href=True)
+        link_url = link['href'] if link else ""
+
         block = {
             "block_type": "article",
             "title": title[:100],
             "body_text": full_content.strip(),
-            "image_url": "",
-            "link_url": "",
+            "image_url": image_url,
+            "link_url": link_url,
         }
         content_blocks.append(block)
 
