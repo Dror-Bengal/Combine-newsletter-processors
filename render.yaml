@@ -2,36 +2,47 @@ services:
 - type: web
   name: newsletter-processor
   env: python
-  buildCommand: pip install -r requirements.txt
-  startCommand: gunicorn app:app
+  buildCommand: |
+    pip install --upgrade pip
+    pip install -r requirements.txt
+  startCommand: gunicorn app:application --timeout 600 --workers 4 --threads 4 --max-requests 500 --max-requests-jitter 50
   envVars:
+    - key: CELERY_BROKER_URL
+      fromService:
+        type: redis
+        name: celery-broker
+        property: connectionString
+    - key: CELERY_RESULT_BACKEND
+      fromService:
+        type: redis
+        name: celery-broker
+        property: connectionString
     - key: GOOGLE_TRANSLATE_API_KEY
       sync: false
 
-  - type: worker
-    name: celery-worker
-    env: python
-    buildCommand: |
-      pip install -U pip
-      pip install -r requirements.txt
-      python -m spacy download en_core_web_sm
-    startCommand: celery -A app.celery worker --loglevel=info --time-limit=600 --soft-time-limit=540
-    envVars:
-      - key: CELERY_BROKER_URL
-        fromService:
-          type: redis
-          name: celery-broker
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          type: redis
-          name: celery-broker
-          property: connectionString
-      - key: GOOGLE_TRANSLATE_API_KEY
-        sync: false
+- type: worker
+  name: celery-worker
+  env: python
+  buildCommand: |
+    pip install -U pip
+    pip install -r requirements.txt
+  startCommand: celery -A app.celery worker --loglevel=info --time-limit=600 --soft-time-limit=540
+  envVars:
+    - key: CELERY_BROKER_URL
+      fromService:
+        type: redis
+        name: celery-broker
+        property: connectionString
+    - key: CELERY_RESULT_BACKEND
+      fromService:
+        type: redis
+        name: celery-broker
+        property: connectionString
+    - key: GOOGLE_TRANSLATE_API_KEY
+      sync: false
 
-  - type: redis
-    name: celery-broker
-    ipAllowList: []
-    plan: starter
-    maxmemoryPolicy: noeviction
+- type: redis
+  name: celery-broker
+  ipAllowList: []
+  plan: starter
+  maxmemoryPolicy: noeviction
