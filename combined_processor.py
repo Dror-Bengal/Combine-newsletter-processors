@@ -36,26 +36,8 @@ def process_email(data):
         sender_name = metadata.get('Sender name', '').lower()
 
         # Determine which processor to use based on sender information
-        if 'sara@axios.com' in sender_email and 'sara fischer' in sender_name:
-            result, status_code = process_axios_media_trends(data)
-        elif 'nomercynomalice@mail.profgalloway.com' in sender_email and 'scott galloway' in sender_name:
-            result, status_code = process_no_mercy_no_malice(data)
-        elif 'notify@sethgodin.com' in sender_email and 'seth godin' in sender_name:
-            result, status_code = process_seth_godin(data)
-        elif 'inspireme@simonsinek.com' in sender_email and 'simon sinek' in sender_name:
-            result, status_code = process_simon_sinek(data)
-        elif 'emailteam@emails.hbr.org' in sender_email and 'harvard business review' in sender_name:
-            result, status_code = process_hbr_management_tip(data)
-        elif 'dorie@dorieclark.com' in sender_email and 'dorie clark' in sender_name:
-            result, status_code = process_dorie_clark(data)
-        elif 'adweek' in sender_name:
-            result, status_code = process_adweek(data)
-        elif 'campaign brief' in sender_name:
-            result, status_code = process_campaign_brief(data)
-        elif 'creative bloq' in sender_name:
-            result, status_code = process_creative_bloq(data)
-        else:
-            result, status_code = process_generic(data)
+        processor_function = determine_processor(sender_email, sender_name)
+        result, status_code = processor_function(data)
 
         if status_code == 200 and 'content' in result and 'content_blocks' in result['content']:
             formatted_blocks = []
@@ -76,6 +58,33 @@ def process_email(data):
         logger.exception("Unexpected error in process_email")
         return {"error": str(e)}, 500
 
+def determine_processor(sender_email, sender_name):
+    processors = {
+        ('sara@axios.com', 'sara fischer'): process_axios_media_trends,
+        ('nomercynomalice@mail.profgalloway.com', 'scott galloway'): process_no_mercy_no_malice,
+        ('notify@sethgodin.com', 'seth godin'): process_seth_godin,
+        ('inspireme@simonsinek.com', 'simon sinek'): process_simon_sinek,
+        ('emailteam@emails.hbr.org', 'harvard business review'): process_hbr_management_tip,
+        ('dorie@dorieclark.com', 'dorie clark'): process_dorie_clark,
+    }
+    
+    for (email, name), processor in processors.items():
+        if email in sender_email and name in sender_name:
+            return processor
+    
+    if 'adweek' in sender_name:
+        return process_adweek
+    elif 'campaign brief' in sender_name:
+        return process_campaign_brief
+    elif 'creative bloq' in sender_name:
+        return process_creative_bloq
+    else:
+        return process_generic
+
+def process_axios_media_trends(data):
+    # Add your code here to process Axios Media Trends emails
+    pass
+
 def determine_credit(sender_name):
     credits = {
         'sara fischer': 'Axios Media Trends',
@@ -90,17 +99,45 @@ def determine_credit(sender_name):
     }
     return credits.get(sender_name.lower(), 'Newsletter')
 
-# Axios Media Trends Processor
-def process_axios_media_trends(data):
-    logger.debug("Processing Axios Media Trends email")
+def extract_content_blocks(soup):
+    content_blocks = []
+    potential_blocks = soup.find_all(['div', 'table', 'tr', 'td'], class_=lambda x: x and any(keyword in x for keyword in ['content', 'article', 'story', 'post']))
+    
+    for block in potential_blocks:
+        title = block.find(['h1', 'h2', 'h3', 'strong'])
+        title_text = title.get_text(strip=True) if title else ""
+        
+        body = block.find(['p', 'div'], class_=lambda x: x and 'body' in x) or block
+        body_text = body.get_text(strip=True)
+        
+        image = block.find('img')
+        image_url = image['src'] if image and 'src' in image.attrs else ""
+        
+        link = block.find('a', href=True)
+        link_url = link['href'] if link else ""
+        
+        if title_text or body_text:
+            content_blocks.append({
+                "block_type": "article",
+                "title": title_text,
+                "body_text": body_text,
+                "image_url": image_url,
+                "link_url": link_url,
+            })
+    
+    return content_blocks
+
+# Generic processor that can handle unknown newsletter formats
+def process_generic(data):
+    logger.debug("Processing generic email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
-    output_json = create_base_output_structure(metadata, "Axios Media Trends")
-    
+    output_json = create_base_output_structure(metadata, "Generic Newsletter")
+
     soup = BeautifulSoup(content_html, 'html.parser')
-    content_blocks = extract_axios_content_blocks(soup)
+    content_blocks = extract_content_blocks(soup)
     output_json['content']['content_blocks'] = content_blocks
-    
+
     return output_json, 200
 
 def extract_axios_content_blocks(soup):
@@ -146,7 +183,12 @@ def process_no_mercy_no_malice(data):
     output_json = create_base_output_structure(metadata, "No Mercy No Malice")
 
     soup = BeautifulSoup(content_html, 'html.parser')
-    content_blocks = extract_no_mercy_no_malice_content(soup)
+    content_blocks = extract_content_blocks(soup)
+    
+    if not content_blocks:
+        # Fallback to the original extraction method if no blocks were found
+        content_blocks = extract_no_mercy_no_malice_content(soup)
+    
     output_json['content']['content_blocks'] = content_blocks
 
     return output_json, 200
