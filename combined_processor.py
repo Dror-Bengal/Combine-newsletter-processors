@@ -37,29 +37,58 @@ def process_email(data):
 
         # Determine which processor to use based on sender information
         if 'sara@axios.com' in sender_email and 'sara fischer' in sender_name:
-            return process_axios_media_trends(data)
+            result, status_code = process_axios_media_trends(data)
         elif 'nomercynomalice@mail.profgalloway.com' in sender_email and 'scott galloway' in sender_name:
-            return process_no_mercy_no_malice(data)
+            result, status_code = process_no_mercy_no_malice(data)
         elif 'notify@sethgodin.com' in sender_email and 'seth godin' in sender_name:
-            return process_seth_godin(data)
+            result, status_code = process_seth_godin(data)
         elif 'inspireme@simonsinek.com' in sender_email and 'simon sinek' in sender_name:
-            return process_simon_sinek(data)
+            result, status_code = process_simon_sinek(data)
         elif 'emailteam@emails.hbr.org' in sender_email and 'harvard business review' in sender_name:
-            return process_hbr_management_tip(data)
+            result, status_code = process_hbr_management_tip(data)
         elif 'dorie@dorieclark.com' in sender_email and 'dorie clark' in sender_name:
-            return process_dorie_clark(data)
+            result, status_code = process_dorie_clark(data)
         elif 'adweek' in sender_name:
-            return process_adweek(data)
+            result, status_code = process_adweek(data)
         elif 'campaign brief' in sender_name:
-            return process_campaign_brief(data)
+            result, status_code = process_campaign_brief(data)
         elif 'creative bloq' in sender_name:
-            return process_creative_bloq(data)
+            result, status_code = process_creative_bloq(data)
         else:
-            return process_generic(data)
+            result, status_code = process_generic(data)
+
+        if status_code == 200 and 'content' in result and 'content_blocks' in result['content']:
+            formatted_blocks = []
+            for block in result['content']['content_blocks']:
+                formatted_block = {
+                    "title": block.get('title', ''),
+                    "image_url": block.get('image_url', ''),
+                    "body_text": block.get('body_text', ''),
+                    "link": block.get('link_url', ''),
+                    "credit": determine_credit(sender_name)
+                }
+                formatted_blocks.append(formatted_block)
+            result['content']['content_blocks'] = formatted_blocks
+
+        return result, status_code
 
     except Exception as e:
         logger.exception("Unexpected error in process_email")
         return {"error": str(e)}, 500
+
+def determine_credit(sender_name):
+    credits = {
+        'sara fischer': 'Axios Media Trends',
+        'scott galloway': 'No Mercy No Malice',
+        'seth godin': "Seth Godin's Blog",
+        'simon sinek': "Simon Sinek's Notes to Inspire",
+        'harvard business review': 'Harvard Business Review Management Tip',
+        'dorie clark': 'Dorie Clark Newsletter',
+        'adweek': 'Adweek',
+        'campaign brief': 'Campaign Brief',
+        'creative bloq': 'Creative Bloq'
+    }
+    return credits.get(sender_name.lower(), 'Newsletter')
 
 # Axios Media Trends Processor
 def process_axios_media_trends(data):
