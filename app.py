@@ -3,6 +3,10 @@ from combined_processor import process_email
 
 app = Flask(__name__)
 
+@app.route('/')
+def home():
+    return "Newsletter Processor is running!"
+
 @app.route('/process-newsletter', methods=['POST'])
 def process_newsletter():
     data = request.json
