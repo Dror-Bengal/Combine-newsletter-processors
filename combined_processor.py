@@ -6,7 +6,7 @@ import json
 import html2text
 import requests
 import random
-from typing import List, Dict
+from typing import List, Dict, Tuple, Optional
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -27,7 +27,7 @@ def create_base_output_structure(metadata, source_name):
         }
     }
 
-def process_email(data):
+def process_email(data: Dict) -> Tuple[Dict, int]:
     try:
         if 'metadata' not in data or 'content' not in data['metadata'] or 'html' not in data['metadata']['content']:
             return {"error": "Invalid JSON structure"}, 400
@@ -39,14 +39,20 @@ def process_email(data):
         processor_function = determine_processor(sender_email, sender_name.lower())
         processor_result = processor_function(data)
 
-        # Handle case where processor function returns a tuple or just a result
+        if processor_result is None:
+            logger.error(f"Processor function for {sender_name} returned None")
+            return {"error": f"Unable to process email from {sender_name}"}, 500
+
         if isinstance(processor_result, tuple):
             result, status_code = processor_result
         else:
             result, status_code = processor_result, 200
 
-        if status_code == 200 and 'content' in result and 'content_blocks' in result['content']:
+        if status_code == 200 and isinstance(result, dict) and 'content' in result and 'content_blocks' in result['content']:
             result['content']['content_blocks'] = process_newsletter(result['content']['content_blocks'], sender_name)
+        else:
+            logger.error(f"Invalid result structure from processor for {sender_name}")
+            return {"error": f"Invalid result structure from processor for {sender_name}"}, 500
 
         return result, status_code
 
@@ -54,7 +60,7 @@ def process_email(data):
         logger.exception("Unexpected error in process_email")
         return {"error": str(e)}, 500
 
-def process_newsletter(content_blocks, sender_name):
+def process_newsletter(content_blocks: List[Dict], sender_name: str) -> List[Dict]:
     processed_blocks = []
     for block in content_blocks:
         processed_block = {
@@ -67,7 +73,7 @@ def process_newsletter(content_blocks, sender_name):
         processed_blocks.append(processed_block)
     return processed_blocks
 
-def determine_processor(sender_email, sender_name):
+def determine_processor(sender_email: str, sender_name: str):
     processors = {
         ('sara@axios.com', 'sara fischer'): process_axios_media_trends,
         ('nomercynomalice@mail.profgalloway.com', 'scott galloway'): process_no_mercy_no_malice,
@@ -76,11 +82,11 @@ def determine_processor(sender_email, sender_name):
         ('emailteam@emails.hbr.org', 'harvard business review'): process_hbr_management_tip,
         ('dorie@dorieclark.com', 'dorie clark'): process_dorie_clark,
     }
-    
+
     for (email, name), processor in processors.items():
         if email in sender_email and name in sender_name:
             return processor
-    
+
     if 'adweek' in sender_name:
         return process_adweek
     elif 'campaign brief' in sender_name:
@@ -90,66 +96,19 @@ def determine_processor(sender_email, sender_name):
     else:
         return process_generic
 
-def process_axios_media_trends(data):
-    # Add your code here to process Axios Media Trends emails
-    pass
-
-def determine_credit(sender_name):
-    credits = {
-        'sara fischer': 'Axios Media Trends',
-        'scott galloway': 'No Mercy No Malice',
-        'seth godin': "Seth Godin's Blog",
-        'simon sinek': "Simon Sinek's Notes to Inspire",
-        'harvard business review': 'Harvard Business Review Management Tip',
-        'dorie clark': 'Dorie Clark Newsletter',
-        'adweek': 'Adweek',
-        'campaign brief': 'Campaign Brief',
-        'creative bloq': 'Creative Bloq'
-    }
-    return credits.get(sender_name.lower(), 'Newsletter')
-
-def extract_content_blocks(soup):
-    content_blocks = []
-    potential_blocks = soup.find_all(['div', 'table', 'tr', 'td'], class_=lambda x: x and any(keyword in x for keyword in ['content', 'article', 'story', 'post']))
-    
-    for block in potential_blocks:
-        title = block.find(['h1', 'h2', 'h3', 'strong'])
-        title_text = title.get_text(strip=True) if title else ""
-        
-        body = block.find(['p', 'div'], class_=lambda x: x and 'body' in x) or block
-        body_text = body.get_text(strip=True)
-        
-        image = block.find('img')
-        image_url = image['src'] if image and 'src' in image.attrs else ""
-        
-        link = block.find('a', href=True)
-        link_url = link['href'] if link else ""
-        
-        if title_text or body_text:
-            content_blocks.append({
-                "block_type": "article",
-                "title": title_text,
-                "body_text": body_text,
-                "image_url": image_url,
-                "link_url": link_url,
-            })
-    
-    return content_blocks
-
-# Generic processor that can handle unknown newsletter formats
-def process_generic(data):
-    logger.debug("Processing generic email")
+def process_axios_media_trends(data: Dict) -> Tuple[Dict, int]:
+    logger.debug("Processing Axios Media Trends email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
-    output_json = create_base_output_structure(metadata, "Generic Newsletter")
+    output_json = create_base_output_structure(metadata, "Axios Media Trends")
 
     soup = BeautifulSoup(content_html, 'html.parser')
-    content_blocks = extract_content_blocks(soup)
+    content_blocks = extract_axios_content_blocks(soup)
     output_json['content']['content_blocks'] = content_blocks
 
     return output_json, 200
 
-def extract_axios_content_blocks(soup):
+def extract_axios_content_blocks(soup: BeautifulSoup) -> List[Dict]:
     content_blocks = []
     story_sections = soup.find_all('td', class_='post-text')
 
@@ -173,7 +132,6 @@ def extract_axios_content_blocks(soup):
         image_url = img['src'] if img else ""
 
         block = {
-            "block_type": "article",
             "title": headline_text or "Untitled",
             "body_text": content,
             "image_url": image_url,
@@ -184,8 +142,7 @@ def extract_axios_content_blocks(soup):
 
     return content_blocks
 
-# No Mercy No Malice Processor
-def process_no_mercy_no_malice(data):
+def process_no_mercy_no_malice(data: Dict) -> Tuple[Dict, int]:
     logger.debug("Processing No Mercy No Malice email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
@@ -193,23 +150,11 @@ def process_no_mercy_no_malice(data):
 
     soup = BeautifulSoup(content_html, 'html.parser')
     content_blocks = extract_no_mercy_no_malice_content(soup)
-
-    processed_blocks = []
-    for block in content_blocks:
-        processed_block = {
-            "title": block.get('title', ''),
-            "image_url": block.get('image_url', ''),
-            "body_text": block.get('body_text', ''),
-            "link": block.get('link_url', ''),
-            "credit": "Scott Galloway"  # Hardcoded for this specific newsletter
-        }
-        processed_blocks.append(processed_block)
-
-    output_json['content']['content_blocks'] = processed_blocks
+    output_json['content']['content_blocks'] = content_blocks
 
     return output_json, 200
 
-def extract_no_mercy_no_malice_content(soup):
+def extract_no_mercy_no_malice_content(soup: BeautifulSoup) -> List[Dict]:
     content_blocks = []
     main_content = soup.find('tr', id='content-blocks')
 
@@ -234,7 +179,6 @@ def extract_no_mercy_no_malice_content(soup):
         link_url = link['href'] if link else ""
 
         block = {
-            "block_type": "article",
             "title": title[:100],
             "body_text": full_content.strip(),
             "image_url": image_url,
@@ -244,21 +188,20 @@ def extract_no_mercy_no_malice_content(soup):
 
     return content_blocks
 
-# Seth Godin Processor
-def process_seth_godin(data):
+def process_seth_godin(data: Dict) -> Tuple[Dict, int]:
     logger.debug("Processing Seth Godin's email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Seth Godin's Blog")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_block = extract_seth_godin_content(soup)
     if content_block:
         output_json['content']['content_blocks'] = [content_block]
-    
+
     return output_json, 200
 
-def extract_seth_godin_content(soup):
+def extract_seth_godin_content(soup: BeautifulSoup) -> Optional[Dict]:
     main_image = soup.find('img', class_='c24')
     image_url = main_image['src'] if main_image else ""
 
@@ -271,7 +214,6 @@ def extract_seth_godin_content(soup):
         content_text = "\n\n".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
 
         return {
-            "block_type": "article",
             "title": headline_text,
             "body_text": content_text,
             "image_url": image_url,
@@ -279,21 +221,20 @@ def extract_seth_godin_content(soup):
         }
     return None
 
-# Simon Sinek Processor
-def process_simon_sinek(data):
+def process_simon_sinek(data: Dict) -> Tuple[Dict, int]:
     logger.debug("Processing Simon Sinek's email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Simon Sinek's Notes to Inspire")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_block = extract_simon_sinek_content(soup)
     if content_block:
         output_json['content']['content_blocks'] = [content_block]
-    
+
     return output_json, 200
 
-def extract_simon_sinek_content(soup):
+def extract_simon_sinek_content(soup: BeautifulSoup) -> Optional[Dict]:
     main_image = soup.find('img', class_='stretch-on-mobile')
     image_url = main_image['src'] if main_image else ""
 
@@ -301,7 +242,6 @@ def extract_simon_sinek_content(soup):
     if content_container:
         main_content = content_container.get_text(strip=True)
         return {
-            "block_type": "article",
             "title": "Simon Sinek's Note to Inspire",
             "body_text": main_content,
             "image_url": image_url,
@@ -309,21 +249,20 @@ def extract_simon_sinek_content(soup):
         }
     return None
 
-# HBR Management Tip Processor
-def process_hbr_management_tip(data):
+def process_hbr_management_tip(data: Dict) -> Tuple[Dict, int]:
     logger.debug("Processing HBR Management Tip email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Harvard Business Review Management Tip of the Day")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_block = extract_hbr_management_tip_content(soup)
     if content_block:
         output_json['content']['content_blocks'] = [content_block]
-    
+
     return output_json, 200
 
-def extract_hbr_management_tip_content(soup):
+def extract_hbr_management_tip_content(soup: BeautifulSoup) -> Optional[Dict]:
     main_content = soup.find('table', class_='row-content stack')
     if main_content:
         title = main_content.find('h1')
@@ -337,7 +276,6 @@ def extract_hbr_management_tip_content(soup):
         source_text = source_div.get_text(strip=True) if source_div else ""
 
         return {
-            "block_type": "article",
             "title": title_text,
             "body_text": f"{tip_text}\n\nSource: {source_text}",
             "image_url": "",
@@ -345,20 +283,19 @@ def extract_hbr_management_tip_content(soup):
         }
     return None
 
-# Dorie Clark Processor
-def process_dorie_clark(data):
+def process_dorie_clark(data: Dict) -> Tuple[Dict, int]:
     logger.debug("Processing Dorie Clark newsletter")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Dorie Clark Newsletter")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_blocks = extract_dorie_clark_content(soup)
     output_json['content']['content_blocks'] = content_blocks
-    
+
     return output_json, 200
 
-def extract_dorie_clark_content(soup):
+def extract_dorie_clark_content(soup: BeautifulSoup) -> List[Dict]:
     content_blocks = []
     main_content_div = soup.find('div', class_='message-content')
     if main_content_div:
@@ -387,7 +324,6 @@ def extract_dorie_clark_content(soup):
         text = '\n\n'.join(content)
 
         block = {
-            "block_type": "article",
             "title": "Dorie Clark's Insights",
             "body_text": text,
             "image_url": "",
@@ -397,20 +333,19 @@ def extract_dorie_clark_content(soup):
 
     return content_blocks
 
-# Adweek Processor
-def process_adweek(data):
+def process_adweek(data: Dict) -> Tuple[Dict, int]:
     logger.debug("Processing Adweek email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Adweek")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_blocks = extract_adweek_content(soup)
     output_json['content']['content_blocks'] = content_blocks
-    
+
     return output_json, 200
 
-def extract_adweek_content(soup):
+def extract_adweek_content(soup: BeautifulSoup) -> List[Dict]:
     content_blocks = []
     blocks = soup.find_all(['table', 'div'], class_=['em_wrapper'])
 
@@ -427,7 +362,6 @@ def extract_adweek_content(soup):
             description = desc_elem.text.strip() if desc_elem else ''
 
             content_block = {
-                "block_type": "article",
                 "title": title,
                 "body_text": description,
                 "image_url": image,
@@ -437,26 +371,25 @@ def extract_adweek_content(soup):
 
     return content_blocks
 
-# Campaign Brief Processor
 def process_campaign_brief(data):
     logger.debug("Processing Campaign Brief email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Campaign Brief")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_blocks = extract_campaign_brief_content(soup)
     output_json['content']['content_blocks'] = content_blocks
-    
+
     return output_json, 200
 
 def extract_campaign_brief_content(soup):
     content_blocks = []
     rss_column = soup.find('table', id='rssColumn')
-    
+
     if rss_column:
         blocks = rss_column.find_all('div', style=lambda value: value and 'text-align: left;color: #656565;min-width: 300px;' in value)
-        
+
         for block in blocks:
             content = {
                 "block_type": "article"
@@ -480,17 +413,16 @@ def extract_campaign_brief_content(soup):
 
     return content_blocks
 
-# Creative Bloq Processor
 def process_creative_bloq(data):
     logger.debug("Processing Creative Bloq email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Creative Bloq")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_blocks = extract_creative_bloq_content(soup)
     output_json['content']['content_blocks'] = content_blocks
-    
+
     return output_json, 200
 
 def extract_creative_bloq_content(soup):
@@ -499,7 +431,7 @@ def extract_creative_bloq_content(soup):
 
     for table in content_tables:
         story_blocks = table.find_all('table', class_='name-60')
-        
+
         for story in story_blocks:
             story_data = {
                 "block_type": "article"
@@ -526,22 +458,21 @@ def extract_creative_bloq_content(soup):
 
     return content_blocks
 
-# Generic Processor
 def process_generic(data):
     logger.debug("Processing generic email")
     content_html = data['metadata']['content']['html']
     metadata = data['metadata']
     output_json = create_base_output_structure(metadata, "Generic Newsletter")
-    
+
     soup = BeautifulSoup(content_html, 'html.parser')
     content_blocks = extract_generic_content(soup)
     output_json['content']['content_blocks'] = content_blocks
-    
+
     return output_json, 200
 
 def extract_generic_content(soup):
     content_blocks = []
-    
+
     # Extract title
     title = soup.find(['h1', 'h2'])
     title_text = title.text.strip() if title else "Untitled"
@@ -562,7 +493,6 @@ def extract_generic_content(soup):
     link_url = link['href'] if link and 'href' in link.attrs else ""
 
     content_block = {
-        "block_type": "article",
         "title": title_text,
         "body_text": content,
         "image_url": image_url,
