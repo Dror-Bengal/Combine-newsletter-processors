@@ -6,6 +6,7 @@ import json
 import html2text
 import requests
 import random
+from typing import List, Dict
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -33,9 +34,9 @@ def process_email(data):
 
         metadata = data['metadata']
         sender_email = metadata.get('sender', '').lower()
-        sender_name = metadata.get('Sender name', '').lower()
+        sender_name = metadata.get('Sender name', '')
 
-        processor_function = determine_processor(sender_email, sender_name)
+        processor_function = determine_processor(sender_email, sender_name.lower())
         result, status_code = processor_function(data)
 
         if status_code == 200 and 'content' in result and 'content_blocks' in result['content']:
@@ -44,8 +45,8 @@ def process_email(data):
                     "title": block.get('title', ''),
                     "image_url": block.get('image_url', ''),
                     "body_text": block.get('body_text', ''),
-                    "link": block.get('link', ''),
-                    "credit": block.get('credit', '')
+                    "link": block.get('link_url', ''),
+                    "credit": determine_credit(sender_name)
                 }
                 for block in result['content']['content_blocks']
             ]
