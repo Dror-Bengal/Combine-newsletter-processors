@@ -103,26 +103,16 @@ def determine_categories(content_block: Dict, num_categories=3) -> List[str]:
 
 def process_content_block(content_block: Dict) -> Dict:
     if is_advertisement(content_block):
-        return {
-            "block_type": "removed",
-            "reason": "Content block removed due to advertisement content"
-        }
-    
-    categories = determine_categories(content_block)
-    logger.debug(f"Categories determined for block: {categories}")
-    
+        return None  # We'll filter out None values later
+
     processed_block = {
-        "block_type": content_block.get('block_type', 'article'),
         "title": content_block.get('title', ''),
-        "translated_title": content_block.get('translated_title', ''),
-        "body_text": content_block.get('body_text', ''),
-        "translated_body_text": content_block.get('translated_body_text', ''),
         "image_url": content_block.get('image_url', ''),
-        "link_url": content_block.get('link_url', ''),
-        "score": calculate_score(content_block),
-        "categories": categories
+        "body_text": content_block.get('body_text', ''),
+        "link": content_block.get('link_url', ''),
+        "credit": content_block.get('credit', '')
     }
-    
+
     return processed_block
 
 def clean_text(text: str) -> str:
@@ -161,18 +151,11 @@ def get_readability_score(text: str) -> float:
     return round(readability_score, 2)
 
 def process_newsletter(content_blocks: List[Dict]) -> Dict:
-    """Process the entire newsletter, including overall statistics."""
     processed_blocks = [process_content_block(block) for block in content_blocks]
-    non_ad_blocks = [block for block in processed_blocks if block['block_type'] != 'removed']
-    
-    for block in non_ad_blocks:
-        logger.debug(f"Processed block: {block['title']}, Categories: {block['categories']}")
-    
-    overall_stats = {
-        "total_blocks": len(content_blocks),
-        "non_ad_blocks": len(non_ad_blocks),
-        "average_score": sum(block['score'] for block in non_ad_blocks) / len(non_ad_blocks) if non_ad_blocks else 0,
-        "total_word_count": sum(get_word_count(block['body_text']) for block in non_ad_blocks)
+    non_ad_blocks = [block for block in processed_blocks if block is not None]
+
+    return {
+        "content_blocks": non_ad_blocks
     }
     
     return {

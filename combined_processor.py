@@ -35,22 +35,20 @@ def process_email(data):
         sender_email = metadata.get('sender', '').lower()
         sender_name = metadata.get('Sender name', '').lower()
 
-        # Determine which processor to use based on sender information
         processor_function = determine_processor(sender_email, sender_name)
         result, status_code = processor_function(data)
 
         if status_code == 200 and 'content' in result and 'content_blocks' in result['content']:
-            formatted_blocks = []
-            for block in result['content']['content_blocks']:
-                formatted_block = {
+            result['content']['content_blocks'] = [
+                {
                     "title": block.get('title', ''),
                     "image_url": block.get('image_url', ''),
                     "body_text": block.get('body_text', ''),
-                    "link": block.get('link_url', ''),
-                    "credit": determine_credit(sender_name)
+                    "link": block.get('link', ''),
+                    "credit": block.get('credit', '')
                 }
-                formatted_blocks.append(formatted_block)
-            result['content']['content_blocks'] = formatted_blocks
+                for block in result['content']['content_blocks']
+            ]
 
         return result, status_code
 
@@ -183,13 +181,20 @@ def process_no_mercy_no_malice(data):
     output_json = create_base_output_structure(metadata, "No Mercy No Malice")
 
     soup = BeautifulSoup(content_html, 'html.parser')
-    content_blocks = extract_content_blocks(soup)
-    
-    if not content_blocks:
-        # Fallback to the original extraction method if no blocks were found
-        content_blocks = extract_no_mercy_no_malice_content(soup)
-    
-    output_json['content']['content_blocks'] = content_blocks
+    content_blocks = extract_no_mercy_no_malice_content(soup)
+
+    processed_blocks = []
+    for block in content_blocks:
+        processed_block = {
+            "title": block.get('title', ''),
+            "image_url": block.get('image_url', ''),
+            "body_text": block.get('body_text', ''),
+            "link": block.get('link_url', ''),
+            "credit": "Scott Galloway"  # Hardcoded for this specific newsletter
+        }
+        processed_blocks.append(processed_block)
+
+    output_json['content']['content_blocks'] = processed_blocks
 
     return output_json, 200
 
